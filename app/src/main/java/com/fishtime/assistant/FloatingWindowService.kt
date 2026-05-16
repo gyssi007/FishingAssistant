@@ -38,50 +38,69 @@ class FloatingWindowService : Service() {
 
         if (floatingView != null) {
 
-            windowManager.removeView(floatingView)
+            windowManager.removeView(
+                floatingView
+            )
         }
     }
 
     private fun createFloatingWindow() {
 
         windowManager =
-            getSystemService(WINDOW_SERVICE)
-                    as WindowManager
+            getSystemService(
+                WINDOW_SERVICE
+            ) as WindowManager
 
-        floatingView = LayoutInflater.from(this)
-            .inflate(
-                R.layout.layout_floating_window,
-                null
-            )
+        floatingView =
+            LayoutInflater.from(this)
+                .inflate(
+                    R.layout.layout_floating_window,
+                    null
+                )
 
         statusText =
             floatingView!!.findViewById(
                 R.id.floatStatus
             )
 
-        updateStatus("🟢 监听中")
+        FloatingWindowManager.textView =
+            statusText
 
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+        statusText.text =
+            "🟢 监听中"
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else
-                WindowManager.LayoutParams.TYPE_PHONE,
+        val params =
+            WindowManager.LayoutParams(
 
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                WindowManager.LayoutParams.WRAP_CONTENT,
 
-            PixelFormat.TRANSLUCENT
-        )
+                WindowManager.LayoutParams.WRAP_CONTENT,
 
-        params.gravity = Gravity.TOP or Gravity.END
+                if (
+                    Build.VERSION.SDK_INT >=
+                    Build.VERSION_CODES.O
+                )
+
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+
+                else
+
+                    WindowManager.LayoutParams.TYPE_PHONE,
+
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+
+                PixelFormat.TRANSLUCENT
+            )
+
+        params.gravity =
+            Gravity.TOP or Gravity.END
 
         params.x = 30
 
         params.y = 200
 
         floatingView!!.setOnTouchListener(
+
             object : View.OnTouchListener {
 
                 private var initialX = 0
@@ -105,9 +124,11 @@ class FloatingWindowService : Service() {
 
                             initialY = params.y
 
-                            initialTouchX = event.rawX
+                            initialTouchX =
+                                event.rawX
 
-                            initialTouchY = event.rawY
+                            initialTouchY =
+                                event.rawY
 
                             return true
                         }
@@ -116,13 +137,15 @@ class FloatingWindowService : Service() {
 
                             params.x =
                                 initialX - (
-                                        event.rawX - initialTouchX
-                                        ).toInt()
+                                    event.rawX -
+                                    initialTouchX
+                                ).toInt()
 
                             params.y =
                                 initialY + (
-                                        event.rawY - initialTouchY
-                                        ).toInt()
+                                    event.rawY -
+                                    initialTouchY
+                                ).toInt()
 
                             windowManager.updateViewLayout(
                                 floatingView,
@@ -142,10 +165,5 @@ class FloatingWindowService : Service() {
             floatingView,
             params
         )
-    }
-
-    fun updateStatus(text: String) {
-
-        statusText.text = text
     }
 }
