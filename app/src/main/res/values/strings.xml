@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<resources>
+
+    <string name="app_name">渔榜助手</string>
+
+    <string name="accessibility_desc">
+        渔榜助手自动识别钓位服务
+    </string>
+
+</resources>
