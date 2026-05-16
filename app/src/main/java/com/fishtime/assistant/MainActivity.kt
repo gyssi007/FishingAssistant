@@ -1,21 +1,48 @@
 package com.fishtime.assistant
 
-import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
+import android.provider.Settings
+import android.widget.Button
 import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
 
-class MainActivity : Activity() {
+class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
 
         super.onCreate(savedInstanceState)
 
-        val text = TextView(this)
+        setContentView(R.layout.activity_main)
 
-        text.text = "渔榜助手 APK 构建成功"
+        val serviceStatus = findViewById<TextView>(R.id.serviceStatus)
 
-        text.textSize = 28f
+        val enableButton = findViewById<Button>(R.id.enableButton)
 
-        setContentView(text)
+        val startButton = findViewById<Button>(R.id.startButton)
+
+        if (isAccessibilityEnabled()) {
+
+            serviceStatus.text = "✅ 无障碍服务已开启"
+
+        } else {
+
+            serviceStatus.text = "❌ 无障碍服务未开启"
+        }
+
+        enableButton.setOnClickListener {
+
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
+
+        startButton.setOnClickListener {
+
+            Logger.addLog("✅ 开始监听")
+        }
+    }
+
+    private fun isAccessibilityEnabled(): Boolean {
+
+        return true
     }
 }
