@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F5F5F5">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🎣 渔榜助手 v2.0"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:textColor="#1B5E20"/>
+
+        <TextView
+            android:id="@+id/serviceStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="检测中..."
+            android:textSize="16sp"
+            android:layout_marginTop="20dp"/>
+
+        <Button
+            android:id="@+id/enableButton"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="开启无障碍服务"
+            android:layout_marginTop="20dp"
+            android:backgroundTint="#FFA000"/>
+
+        <Button
+            android:id="@+id/startButton"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="开始监听"
+            android:layout_marginTop="20dp"
+            android:backgroundTint="#1B5E20"/>
+
+    </LinearLayout>
+
+</ScrollView>
