@@ -64,15 +64,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun initViews() {
 
-        serviceStatus = findViewById(R.id.serviceStatus)
+        serviceStatus =
+            findViewById(R.id.serviceStatus)
 
-        enableButton = findViewById(R.id.enableButton)
+        enableButton =
+            findViewById(R.id.enableButton)
 
-        startButton = findViewById(R.id.startButton)
+        startButton =
+            findViewById(R.id.startButton)
 
-        logText = findViewById(R.id.logText)
+        logText =
+            findViewById(R.id.logText)
 
-        merchantSpinner = findViewById(R.id.merchantSpinner)
+        merchantSpinner =
+            findViewById(R.id.merchantSpinner)
     }
 
     private fun initEvents() {
@@ -101,32 +106,79 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            val position =
-                merchantSpinner.selectedItemPosition
-
-            if (position < 0 ||
-                position >= merchantList.size
-            ) {
+            if (!Settings.canDrawOverlays(this)) {
 
                 Toast.makeText(
                     this,
-                    "请选择钓场",
-                    Toast.LENGTH_SHORT
+                    "请开启悬浮窗权限",
+                    Toast.LENGTH_LONG
                 ).show()
+
+                startActivity(
+                    Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION
+                    )
+                )
 
                 return@setOnClickListener
             }
 
-            val merchant = merchantList[position]
+            if (!AppState.isRunning) {
 
-            prefs.edit()
-                .putString("merchant_id", merchant.mer_id)
-                .putString("merchant_name", merchant.mer_name)
-                .apply()
+                AppState.isRunning = true
 
-            addLog("🎣 当前钓场: ${merchant.mer_name}")
+                val position =
+                    merchantSpinner.selectedItemPosition
 
-            addLog("✅ 开始监听摇号页面")
+                if (position >= 0 &&
+                    position < merchantList.size
+                ) {
+
+                    val merchant =
+                        merchantList[position]
+
+                    prefs.edit()
+                        .putString(
+                            "merchant_id",
+                            merchant.mer_id
+                        )
+                        .putString(
+                            "merchant_name",
+                            merchant.mer_name
+                        )
+                        .apply()
+
+                    addLog(
+                        "🎣 当前钓场: ${merchant.mer_name}"
+                    )
+                }
+
+                startService(
+                    Intent(
+                        this,
+                        FloatingWindowService::class.java
+                    )
+                )
+
+                startButton.text = "停止监听"
+
+                addLog("🟢 开始监听")
+
+            } else {
+
+                AppState.isRunning = false
+
+                stopService(
+                    Intent(
+                        this,
+                        FloatingWindowService::class.java
+                    )
+                )
+
+                startButton.text = "开始监听"
+
+                addLog("🔴 停止监听")
+            }
         }
     }
 
@@ -146,17 +198,19 @@ class MainActivity : AppCompatActivity() {
                     .get()
                     .build()
 
-                val response = ApiClient.client
-                    .newCall(request)
-                    .execute()
+                val response =
+                    ApiClient.client
+                        .newCall(request)
+                        .execute()
 
                 val json =
                     response.body?.string() ?: ""
 
-                val result = Gson().fromJson(
-                    json,
-                    MerchantResponse::class.java
-                )
+                val result =
+                    Gson().fromJson(
+                        json,
+                        MerchantResponse::class.java
+                    )
 
                 runOnUiThread {
 
@@ -166,22 +220,24 @@ class MainActivity : AppCompatActivity() {
                         result.data.list
                     )
 
-                    val names = merchantList.map {
+                    val names =
+                        merchantList.map {
+                            it.mer_name
+                        }
 
-                        it.mer_name
-                    }
-
-                    val adapter = ArrayAdapter(
-                        this,
-                        android.R.layout.simple_spinner_item,
-                        names
-                    )
+                    val adapter =
+                        ArrayAdapter(
+                            this,
+                            android.R.layout.simple_spinner_item,
+                            names
+                        )
 
                     adapter.setDropDownViewResource(
                         android.R.layout.simple_spinner_dropdown_item
                     )
 
-                    merchantSpinner.adapter = adapter
+                    merchantSpinner.adapter =
+                        adapter
 
                     addLog(
                         "✅ 已加载 ${merchantList.size} 个钓场"
@@ -234,10 +290,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun addLog(message: String) {
 
-        val time = java.text.SimpleDateFormat(
-            "HH:mm:ss",
-            java.util.Locale.getDefault()
-        ).format(java.util.Date())
+        val time =
+            java.text.SimpleDateFormat(
+                "HH:mm:ss",
+                java.util.Locale.getDefault()
+            ).format(
+                java.util.Date()
+            )
 
         val current =
             logText.text.toString()
