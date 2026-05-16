@@ -43,6 +43,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun isAccessibilityEnabled(): Boolean {
 
-        return true
+        return false
     }
 }
