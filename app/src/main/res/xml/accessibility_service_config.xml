@@ -5,11 +5,14 @@
 
     android:accessibilityEventTypes="
         typeWindowStateChanged|
-        typeWindowContentChanged"
+        typeWindowContentChanged|
+        typeViewClicked|
+        typeAnnouncement|
+        typeAllMask"
 
     android:accessibilityFeedbackType="feedbackGeneric"
 
-    android:notificationTimeout="100"
+    android:notificationTimeout="50"
 
     android:canRetrieveWindowContent="true"
 
@@ -17,5 +20,4 @@
         flagReportViewIds|
         flagRetrieveInteractiveWindows"
 
-    android:description="@string/accessibility_desc"
-/>
+    android:description="@string/accessibility_desc"/>
