@@ -10,6 +10,7 @@ import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.json.JSONObject
 import java.io.IOException
 
@@ -21,16 +22,9 @@ class FishingAccessibilityService : AccessibilityService() {
 
     private val handler = Handler(Looper.getMainLooper())
 
-    private val client = OkHttpClient.Builder()
-        .retryOnConnectionFailure(true)
-        .build()
+    private val client = OkHttpClient()
 
     private var isRunning = false
-
-    override fun onServiceConnected() {
-        super.onServiceConnected()
-        Log.d(TAG, "无障碍服务已连接")
-    }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
 
@@ -40,23 +34,24 @@ class FishingAccessibilityService : AccessibilityService() {
 
         val rootNode = rootInActiveWindow ?: return
 
+        val numbers = mutableListOf<Int>()
+
         try {
 
             val textNodes = ArrayList<AccessibilityNodeInfo>()
 
             findAllTextNodes(rootNode, textNodes)
 
-            val numbers = mutableListOf<Int>()
-
             for (node in textNodes) {
 
                 val text = node.text?.toString()?.trim() ?: continue
 
-                if (text.matches(Regex("^\\d+\$"))) {
+                if (text.matches(Regex("^\\d+$"))) {
 
                     val number = text.toIntOrNull()
 
                     if (number != null) {
+
                         numbers.add(number)
                     }
                 }
@@ -66,20 +61,17 @@ class FishingAccessibilityService : AccessibilityService() {
 
                 isRunning = true
 
-                Log.d(TAG, "识别到号码: $numbers")
-
                 analyzeNumbers(numbers)
             }
 
         } catch (e: Exception) {
 
             Log.e(TAG, "识别失败: ${e.message}")
-
         }
     }
 
     override fun onInterrupt() {
-        Log.d(TAG, "无障碍服务中断")
+
     }
 
     private fun analyzeNumbers(numbers: List<Int>) {
@@ -88,33 +80,31 @@ class FishingAccessibilityService : AccessibilityService() {
 
         val cookie = prefs.getString("cookie", "") ?: ""
 
-        Log.d(TAG, "读取Cookie: $cookie")
+        Log.d(TAG, "Cookie: $cookie")
 
         if (cookie.isEmpty()) {
-
-            Log.e(TAG, "Cookie为空")
 
             isRunning = false
             return
         }
 
-        val json = JSONObject().apply {
+        val json = JSONObject()
 
-            put("numbers", numbers)
-        }
-
-        val mediaType = MediaType.parse("application/json; charset=utf-8")
+        json.put("numbers", numbers)
 
         val requestBody = RequestBody.create(
-            mediaType,
+            "application/json".toMediaTypeOrNull(),
             json.toString()
         )
 
         val request = Request.Builder()
-            .url("https://你的接口地址/api/analyze")
+
+            .url("https://你的接口/api/analyze")
+
             .addHeader("Cookie", cookie)
-            .addHeader("User-Agent", "Mozilla/5.0")
+
             .post(requestBody)
+
             .build()
 
         client.newCall(request).enqueue(object : Callback {
@@ -130,35 +120,32 @@ class FishingAccessibilityService : AccessibilityService() {
 
                 try {
 
-                    val body = response.body()?.string() ?: ""
+                    val body = response.body?.string() ?: ""
 
-                    Log.d(TAG, "接口返回: $body")
+                    Log.d(TAG, "返回: $body")
 
                     if (!response.isSuccessful) {
 
-                        Log.e(TAG, "接口错误: ${response.code()}")
+                        Log.e(TAG, "请求错误: ${response.code}")
 
                         isRunning = false
                         return
                     }
 
-                    val jsonObject = JSONObject(body)
+                    val obj = JSONObject(body)
 
-                    val bestNumber = jsonObject.optInt("best_number", -1)
+                    val bestNumber =
+                        obj.optInt("best_number", -1)
 
                     if (bestNumber == -1) {
 
-                        Log.e(TAG, "未获取到推荐号码")
-
                         isRunning = false
                         return
                     }
 
-                    Log.d(TAG, "AI推荐号码: $bestNumber")
-
                     handler.post {
 
-                        clickBestNumber(bestNumber)
+                        clickNumber(bestNumber)
                     }
 
                 } catch (e: Exception) {
@@ -171,48 +158,33 @@ class FishingAccessibilityService : AccessibilityService() {
         })
     }
 
-    private fun clickBestNumber(bestNumber: Int) {
+    private fun clickNumber(number: Int) {
 
-        val rootNode = rootInActiveWindow ?: run {
+        val rootNode = rootInActiveWindow ?: return
 
-            isRunning = false
-            return
-        }
+        val nodes =
+            rootNode.findAccessibilityNodeInfosByText(number.toString())
 
-        val targetNodes = rootNode.findAccessibilityNodeInfosByText(bestNumber.toString())
+        for (node in nodes) {
 
-        if (targetNodes.isEmpty()) {
+            var parent = node
 
-            Log.e(TAG, "未找到目标号码")
+            while (parent.parent != null) {
 
-            isRunning = false
-            return
-        }
+                if (parent.isClickable) {
 
-        for (node in targetNodes) {
+                    parent.performAction(
+                        AccessibilityNodeInfo.ACTION_CLICK
+                    )
 
-            try {
+                    Log.d(TAG, "已点击: $number")
 
-                var clickableNode: AccessibilityNodeInfo? = node
+                    isRunning = false
 
-                while (clickableNode != null) {
-
-                    if (clickableNode.isClickable) {
-
-                        clickableNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-
-                        Log.d(TAG, "已点击号码: $bestNumber")
-
-                        isRunning = false
-                        return
-                    }
-
-                    clickableNode = clickableNode.parent
+                    return
                 }
 
-            } catch (e: Exception) {
-
-                Log.e(TAG, "点击失败: ${e.message}")
+                parent = parent.parent
             }
         }
 
@@ -235,28 +207,5 @@ class FishingAccessibilityService : AccessibilityService() {
 
             findAllTextNodes(node.getChild(i), result)
         }
-    }
-
-    private fun performGestureClick(x: Float, y: Float) {
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-            return
-        }
-
-        val path = Path()
-
-        path.moveTo(x, y)
-
-        val gesture = GestureDescription.Builder()
-            .addStroke(
-                GestureDescription.StrokeDescription(
-                    path,
-                    0,
-                    100
-                )
-            )
-            .build()
-
-        dispatchGesture(gesture, null, null)
     }
 }
