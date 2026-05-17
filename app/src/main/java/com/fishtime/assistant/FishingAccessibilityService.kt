@@ -103,8 +103,10 @@ class FishingAccessibilityService : AccessibilityService() {
             put("numbers", numbers)
         }
 
+        val mediaType = MediaType.parse("application/json; charset=utf-8")
+
         val requestBody = RequestBody.create(
-            "application/json".toMediaTypeOrNull(),
+            mediaType,
             json.toString()
         )
 
@@ -128,13 +130,13 @@ class FishingAccessibilityService : AccessibilityService() {
 
                 try {
 
-                    val body = response.body?.string() ?: ""
+                    val body = response.body()?.string() ?: ""
 
                     Log.d(TAG, "接口返回: $body")
 
                     if (!response.isSuccessful) {
 
-                        Log.e(TAG, "接口错误: ${response.code}")
+                        Log.e(TAG, "接口错误: ${response.code()}")
 
                         isRunning = false
                         return
