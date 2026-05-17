@@ -1,11 +1,27 @@
 package com.fishtime.assistant
 
 import android.accessibilityservice.AccessibilityService
+import android.os.SystemClock
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import android.util.Log
+import java.util.concurrent.atomic.AtomicBoolean
 
-class FishingAccessibilityService : AccessibilityService() {
+class FishingAccessibilityService :
+    AccessibilityService() {
+
+    companion object {
+
+        private const val TAG =
+            "FishingAccessibility"
+
+        private var lastScanTime = 0L
+
+        private val isAnalyzing =
+            AtomicBoolean(false)
+
+        private var lastSeats = ""
+    }
 
     override fun onAccessibilityEvent(
         event: AccessibilityEvent?
@@ -15,15 +31,30 @@ class FishingAccessibilityService : AccessibilityService() {
             return
         }
 
-        if (
-            event?.eventType ==
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-            ||
-            event?.eventType ==
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-        ) {
+        if (event == null) {
+            return
+        }
 
-            scanPage()
+        when (event.eventType) {
+
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
+
+                val now =
+                    SystemClock.elapsedRealtime()
+
+                // 节流
+                if (
+                    now - lastScanTime < 1200
+                ) {
+                    return
+                }
+
+                lastScanTime = now
+
+                scanPage()
+            }
         }
     }
 
@@ -31,10 +62,24 @@ class FishingAccessibilityService : AccessibilityService() {
 
     }
 
+    // ─────────────────────────────
+    // 扫描页面
+    // ─────────────────────────────
+
     private fun scanPage() {
+
+        if (
+            isAnalyzing.get()
+        ) {
+            return
+        }
 
         val root =
             rootInActiveWindow ?: return
+
+        FloatingWindowManager.updateText(
+            "🔍 AI识别页面"
+        )
 
         val found =
             findPageTitle(root)
@@ -49,7 +94,7 @@ class FishingAccessibilityService : AccessibilityService() {
         if (numbers.size < 2) {
 
             FloatingWindowManager.updateText(
-                "❌ 未识别到二选一"
+                "❌ 未识别二选一"
             )
 
             return
@@ -59,17 +104,28 @@ class FishingAccessibilityService : AccessibilityService() {
 
         val seatB = numbers[1]
 
+        val current =
+            "$seatA-$seatB"
+
+        // 防重复分析
+
+        if (
+            current == lastSeats
+        ) {
+            return
+        }
+
+        lastSeats = current
+
         FloatingWindowManager.updateText(
-            "🎯 识别到 $seatA / $seatB"
+            "🎯 二选一: $seatA / $seatB"
         )
+
+        isAnalyzing.set(true)
 
         Thread {
 
             try {
-
-                FloatingWindowManager.updateText(
-                    "🤖 AI分析中..."
-                )
 
                 val prefs =
                     getSharedPreferences(
@@ -97,6 +153,8 @@ class FishingAccessibilityService : AccessibilityService() {
                         "❌ Cookie为空"
                     )
 
+                    isAnalyzing.set(false)
+
                     return@Thread
                 }
 
@@ -108,8 +166,19 @@ class FishingAccessibilityService : AccessibilityService() {
                         "❌ 未选择钓场"
                     )
 
+                    isAnalyzing.set(false)
+
                     return@Thread
                 }
+
+                FloatingWindowManager.updateText(
+                    "🤖 AI分析中"
+                )
+
+                Log.d(
+                    TAG,
+                    "开始分析: $seatA / $seatB"
+                )
 
                 val summaryA =
                     ApiClient.getSeatSummary(
@@ -131,8 +200,10 @@ class FishingAccessibilityService : AccessibilityService() {
                 ) {
 
                     FloatingWindowManager.updateText(
-                        "❌ 接口分析失败"
+                        "❌ 分析接口失败"
                     )
+
+                    isAnalyzing.set(false)
 
                     return@Thread
                 }
@@ -148,7 +219,7 @@ class FishingAccessibilityService : AccessibilityService() {
                     )
 
                 FloatingWindowManager.updateText(
-                    "✅ 推荐 $recommend 号"
+                    "✅ 推荐: $recommend"
                 )
 
                 Thread.sleep(800)
@@ -163,12 +234,20 @@ class FishingAccessibilityService : AccessibilityService() {
                 e.printStackTrace()
 
                 FloatingWindowManager.updateText(
-                    "❌ 网络异常"
+                    "❌ AI分析异常"
                 )
+
+            } finally {
+
+                isAnalyzing.set(false)
             }
 
         }.start()
     }
+
+    // ─────────────────────────────
+    // 查找页面
+    // ─────────────────────────────
 
     private fun findPageTitle(
         node: AccessibilityNodeInfo
@@ -177,15 +256,20 @@ class FishingAccessibilityService : AccessibilityService() {
         val keywords =
             listOf(
 
-                "我的钓位",
-
                 "选择钓位",
 
-                "请选择钓位"
+                "请选择钓位",
+
+                "我的钓位",
+
+                "二选一",
+
+                "抽号"
             )
 
         val text =
-            node.text?.toString() ?: ""
+            node.text?.toString()
+                ?: ""
 
         for (keyword in keywords) {
 
@@ -204,10 +288,10 @@ class FishingAccessibilityService : AccessibilityService() {
 
             if (child != null) {
 
-                val result =
+                val found =
                     findPageTitle(child)
 
-                if (result) {
+                if (found) {
 
                     return true
                 }
@@ -216,6 +300,10 @@ class FishingAccessibilityService : AccessibilityService() {
 
         return false
     }
+
+    // ─────────────────────────────
+    // 提取号码
+    // ─────────────────────────────
 
     private fun extractNumbers(
         node: AccessibilityNodeInfo
@@ -230,7 +318,9 @@ class FishingAccessibilityService : AccessibilityService() {
         )
 
         return result
+
             .distinct()
+
             .filter {
 
                 try {
@@ -245,8 +335,13 @@ class FishingAccessibilityService : AccessibilityService() {
                     false
                 }
             }
+
             .take(2)
     }
+
+    // ─────────────────────────────
+    // 递归提取
+    // ─────────────────────────────
 
     private fun recursiveExtract(
 
@@ -284,6 +379,10 @@ class FishingAccessibilityService : AccessibilityService() {
         }
     }
 
+    // ─────────────────────────────
+    // 自动点击
+    // ─────────────────────────────
+
     private fun autoClick(
 
         root: AccessibilityNodeInfo,
@@ -294,28 +393,57 @@ class FishingAccessibilityService : AccessibilityService() {
 
         try {
 
+            FloatingWindowManager.updateText(
+                "⚡ 自动点击中"
+            )
+
             val seatNodes =
                 root.findAccessibilityNodeInfosByText(
                     seatNumber
                 )
 
             if (
-                seatNodes.isNotEmpty()
+                seatNodes.isEmpty()
             ) {
 
-                seatNodes[0].performAction(
-                    AccessibilityNodeInfo.ACTION_CLICK
-                )
-
                 FloatingWindowManager.updateText(
-                    "✅ 已选择 $seatNumber 号"
+                    "❌ 未找到钓位"
                 )
 
-                Thread.sleep(500)
+                return
+            }
+
+            val seatNode =
+                seatNodes[0]
+
+            seatNode.performAction(
+                AccessibilityNodeInfo.ACTION_CLICK
+            )
+
+            FloatingWindowManager.updateText(
+                "✅ 已选择 $seatNumber"
+            )
+
+            Thread.sleep(600)
+
+            val confirmTexts =
+                listOf(
+
+                    "确定",
+
+                    "确认",
+
+                    "提交"
+                )
+
+            var clicked =
+                false
+
+            for (text in confirmTexts) {
 
                 val confirmNodes =
                     root.findAccessibilityNodeInfosByText(
-                        "确定"
+                        text
                     )
 
                 if (
@@ -326,20 +454,22 @@ class FishingAccessibilityService : AccessibilityService() {
                         AccessibilityNodeInfo.ACTION_CLICK
                     )
 
-                    FloatingWindowManager.updateText(
-                        "✅ 已自动确认"
-                    )
-                } else {
+                    clicked = true
 
-                    FloatingWindowManager.updateText(
-                        "❌ 未找到确定按钮"
-                    )
+                    break
                 }
+            }
+
+            if (clicked) {
+
+                FloatingWindowManager.updateText(
+                    "✅ 自动确认成功"
+                )
 
             } else {
 
                 FloatingWindowManager.updateText(
-                    "❌ 未找到钓位按钮"
+                    "⚠️ 未找到确认按钮"
                 )
             }
 
