@@ -1,138 +1,260 @@
 package com.fishtime.assistant
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
+import android.graphics.Path
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import android.util.Log
+import okhttp3.*
+import org.json.JSONObject
+import java.io.IOException
 
 class FishingAccessibilityService : AccessibilityService() {
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (!AppState.isRunning) return
+    companion object {
+        private const val TAG = "FishingAssistant"
+    }
 
-        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
-            event?.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
-            scanPage()
+    private val handler = Handler(Looper.getMainLooper())
+
+    private val client = OkHttpClient.Builder()
+        .retryOnConnectionFailure(true)
+        .build()
+
+    private var isRunning = false
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        Log.d(TAG, "无障碍服务已连接")
+    }
+
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+
+        if (event == null) return
+
+        if (isRunning) return
+
+        val rootNode = rootInActiveWindow ?: return
+
+        try {
+
+            val textNodes = ArrayList<AccessibilityNodeInfo>()
+
+            findAllTextNodes(rootNode, textNodes)
+
+            val numbers = mutableListOf<Int>()
+
+            for (node in textNodes) {
+
+                val text = node.text?.toString()?.trim() ?: continue
+
+                if (text.matches(Regex("^\\d+\$"))) {
+
+                    val number = text.toIntOrNull()
+
+                    if (number != null) {
+                        numbers.add(number)
+                    }
+                }
+            }
+
+            if (numbers.size >= 2) {
+
+                isRunning = true
+
+                Log.d(TAG, "识别到号码: $numbers")
+
+                analyzeNumbers(numbers)
+            }
+
+        } catch (e: Exception) {
+
+            Log.e(TAG, "识别失败: ${e.message}")
+
         }
     }
 
-    override fun onInterrupt() {}
+    override fun onInterrupt() {
+        Log.d(TAG, "无障碍服务中断")
+    }
 
-    private fun scanPage() {
-        val root = rootInActiveWindow ?: return
+    private fun analyzeNumbers(numbers: List<Int>) {
 
-        FloatingWindowManager.updateText("🔍 正在扫描页面...")
+        val prefs = getSharedPreferences("app", MODE_PRIVATE)
 
-        val found = findPageTitle(root)
-        if (!found) {
-            FloatingWindowManager.updateText("❌ 未找到钓位页面")
+        val cookie = prefs.getString("cookie", "") ?: ""
+
+        Log.d(TAG, "读取Cookie: $cookie")
+
+        if (cookie.isEmpty()) {
+
+            Log.e(TAG, "Cookie为空")
+
+            isRunning = false
             return
         }
 
-        val numbers = extractNumbers(root)
-        if (numbers.size < 2) {
-            FloatingWindowManager.updateText("❌ 未识别到二选一钓位")
+        val json = JSONObject().apply {
+
+            put("numbers", numbers)
+        }
+
+        val requestBody = RequestBody.create(
+            "application/json".toMediaTypeOrNull(),
+            json.toString()
+        )
+
+        val request = Request.Builder()
+            .url("https://你的接口地址/api/analyze")
+            .addHeader("Cookie", cookie)
+            .addHeader("User-Agent", "Mozilla/5.0")
+            .post(requestBody)
+            .build()
+
+        client.newCall(request).enqueue(object : Callback {
+
+            override fun onFailure(call: Call, e: IOException) {
+
+                Log.e(TAG, "请求失败: ${e.message}")
+
+                isRunning = false
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+
+                try {
+
+                    val body = response.body?.string() ?: ""
+
+                    Log.d(TAG, "接口返回: $body")
+
+                    if (!response.isSuccessful) {
+
+                        Log.e(TAG, "接口错误: ${response.code}")
+
+                        isRunning = false
+                        return
+                    }
+
+                    val jsonObject = JSONObject(body)
+
+                    val bestNumber = jsonObject.optInt("best_number", -1)
+
+                    if (bestNumber == -1) {
+
+                        Log.e(TAG, "未获取到推荐号码")
+
+                        isRunning = false
+                        return
+                    }
+
+                    Log.d(TAG, "AI推荐号码: $bestNumber")
+
+                    handler.post {
+
+                        clickBestNumber(bestNumber)
+                    }
+
+                } catch (e: Exception) {
+
+                    Log.e(TAG, "解析失败: ${e.message}")
+
+                    isRunning = false
+                }
+            }
+        })
+    }
+
+    private fun clickBestNumber(bestNumber: Int) {
+
+        val rootNode = rootInActiveWindow ?: run {
+
+            isRunning = false
             return
         }
 
-        val seatA = numbers[0]
-        val seatB = numbers[1]
-        FloatingWindowManager.updateText("🎯 识别到钓位: $seatA / $seatB")
+        val targetNodes = rootNode.findAccessibilityNodeInfosByText(bestNumber.toString())
 
-        Thread {
+        if (targetNodes.isEmpty()) {
+
+            Log.e(TAG, "未找到目标号码")
+
+            isRunning = false
+            return
+        }
+
+        for (node in targetNodes) {
+
             try {
-                FloatingWindowManager.updateText("🤖 AI分析中...")
 
-                val prefs = getSharedPreferences("app", MODE_PRIVATE)
-                val cookie = prefs.getString("cookie", "") ?: ""
-                val merId = prefs.getString("merchant_id", "") ?: ""
+                var clickableNode: AccessibilityNodeInfo? = node
 
-                if (cookie.isEmpty()) {
-                    FloatingWindowManager.updateText("❌ Cookie为空")
-                    return@Thread
+                while (clickableNode != null) {
+
+                    if (clickableNode.isClickable) {
+
+                        clickableNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+
+                        Log.d(TAG, "已点击号码: $bestNumber")
+
+                        isRunning = false
+                        return
+                    }
+
+                    clickableNode = clickableNode.parent
                 }
-
-                if (merId.isEmpty()) {
-                    FloatingWindowManager.updateText("❌ 未选择钓场")
-                    return@Thread
-                }
-
-                val summaryA = ApiClient.getSeatSummary(cookie, merId, seatA)
-                val summaryB = ApiClient.getSeatSummary(cookie, merId, seatB)
-
-                if (summaryA == null || summaryB == null) {
-                    FloatingWindowManager.updateText("❌ 接口分析失败")
-                    return@Thread
-                }
-
-                FloatingWindowManager.updateText("✅ 钓位数据已获取")
-
-                val recommend = SeatAnalyzer.analyze(seatA, summaryA, seatB, summaryB)
-                FloatingWindowManager.updateText("✅ 推荐 ${recommend}号")
-
-                Thread.sleep(800)
-
-                autoClick(root, recommend)
 
             } catch (e: Exception) {
-                e.printStackTrace()
-                FloatingWindowManager.updateText("❌ 网络或处理异常: ${e.message}")
+
+                Log.e(TAG, "点击失败: ${e.message}")
             }
-        }.start()
+        }
+
+        isRunning = false
     }
 
-    private fun findPageTitle(node: AccessibilityNodeInfo): Boolean {
-        val keywords = listOf("我的钓位", "选择钓位", "请选择钓位")
-        val text = node.text?.toString() ?: ""
-        for (keyword in keywords) if (text.contains(keyword)) return true
+    private fun findAllTextNodes(
+        node: AccessibilityNodeInfo?,
+        result: MutableList<AccessibilityNodeInfo>
+    ) {
+
+        if (node == null) return
+
+        if (!node.text.isNullOrEmpty()) {
+
+            result.add(node)
+        }
+
         for (i in 0 until node.childCount) {
-            val child = node.getChild(i)
-            if (child != null) {
-                if (findPageTitle(child)) return true
-            }
-        }
-        return false
-    }
 
-    private fun extractNumbers(node: AccessibilityNodeInfo): List<String> {
-        val result = mutableListOf<String>()
-        recursiveExtract(node, result)
-        return result
-            .distinct()
-            .filter { try { it.toInt() in 1..99 } catch (e: Exception) { false } }
-            .take(2)
-    }
-
-    private fun recursiveExtract(node: AccessibilityNodeInfo, result: MutableList<String>) {
-        val text = node.text?.toString() ?: ""
-        if (text.matches(Regex("^\\d{1,2}$"))) result.add(text)
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i)
-            if (child != null) recursiveExtract(child, result)
+            findAllTextNodes(node.getChild(i), result)
         }
     }
 
-    private fun autoClick(root: AccessibilityNodeInfo, seatNumber: String) {
-        try {
-            val seatNodes = root.findAccessibilityNodeInfosByText(seatNumber)
-            if (seatNodes.isNotEmpty()) {
-                seatNodes[0].performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                FloatingWindowManager.updateText("✅ 已选择 $seatNumber 号")
-                Thread.sleep(500)
+    private fun performGestureClick(x: Float, y: Float) {
 
-                val confirmNodes = root.findAccessibilityNodeInfosByText("确定")
-                if (confirmNodes.isNotEmpty()) {
-                    confirmNodes[0].performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                    FloatingWindowManager.updateText("✅ 已自动确认")
-                } else {
-                    FloatingWindowManager.updateText("❌ 未找到确认按钮")
-                }
-            } else {
-                FloatingWindowManager.updateText("❌ 未找到钓位按钮")
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            FloatingWindowManager.updateText("❌ 自动点击失败: ${e.message}")
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            return
         }
+
+        val path = Path()
+
+        path.moveTo(x, y)
+
+        val gesture = GestureDescription.Builder()
+            .addStroke(
+                GestureDescription.StrokeDescription(
+                    path,
+                    0,
+                    100
+                )
+            )
+            .build()
+
+        dispatchGesture(gesture, null, null)
     }
 }
