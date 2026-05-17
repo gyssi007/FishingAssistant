@@ -65,7 +65,7 @@ class LoginActivity : AppCompatActivity() {
         val request = Request.Builder()
 
             // 改成你的真实接口
-            .url("https://你的接口地址/api/login")
+            .url("https://fishing.gysssi.com/api/login")
 
             .post(requestBody)
 
