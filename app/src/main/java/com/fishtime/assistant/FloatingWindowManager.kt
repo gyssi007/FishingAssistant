@@ -5,7 +5,6 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.view.Gravity
 import android.view.LayoutInflater
-import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
@@ -13,46 +12,41 @@ import android.widget.TextView
 object FloatingWindowManager {
 
     private var windowManager:
-            WindowManager? = null
+        WindowManager? = null
 
     private var floatingView:
-            View? = null
+        View? = null
 
     private var textView:
-            TextView? = null
+        TextView? = null
 
-    private var params:
-            WindowManager.LayoutParams? = null
-
-    fun show(
-        context: Context
-    ) {
+    fun show(context: Context) {
 
         if (floatingView != null) {
             return
         }
 
         windowManager =
-
             context.getSystemService(
                 Context.WINDOW_SERVICE
             ) as WindowManager
 
         floatingView =
-
             LayoutInflater.from(context)
                 .inflate(
-                    R.layout.layout_floating,
+                    R.layout.layout_floating_window,
                     null
                 )
 
         textView =
-            floatingView?.findViewById(
+            floatingView!!.findViewById(
                 R.id.floatText
             )
 
-        params =
+        textView?.text =
+            "🎣 渔榜助手启动"
 
+        val params =
             WindowManager.LayoutParams(
 
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -75,90 +69,24 @@ object FloatingWindowManager {
                 PixelFormat.TRANSLUCENT
             )
 
-        params?.gravity =
-            Gravity.TOP or Gravity.END
+        params.gravity =
+            Gravity.TOP or Gravity.START
 
-        params?.x = 30
+        params.x = 20
 
-        params?.y = 200
-
-        // 拖动
-
-        floatingView?.setOnTouchListener(
-
-            object : View.OnTouchListener {
-
-                private var initialX = 0
-
-                private var initialY = 0
-
-                private var initialTouchX = 0f
-
-                private var initialTouchY = 0f
-
-                override fun onTouch(
-                    v: View?,
-                    event: MotionEvent
-                ): Boolean {
-
-                    when (event.action) {
-
-                        MotionEvent.ACTION_DOWN -> {
-
-                            initialX =
-                                params?.x ?: 0
-
-                            initialY =
-                                params?.y ?: 0
-
-                            initialTouchX =
-                                event.rawX
-
-                            initialTouchY =
-                                event.rawY
-
-                            return true
-                        }
-
-                        MotionEvent.ACTION_MOVE -> {
-
-                            params?.x =
-                                initialX -
-                                        (event.rawX - initialTouchX).toInt()
-
-                            params?.y =
-                                initialY +
-                                        (event.rawY - initialTouchY).toInt()
-
-                            windowManager?.updateViewLayout(
-                                floatingView,
-                                params
-                            )
-
-                            return true
-                        }
-                    }
-
-                    return false
-                }
-            }
-        )
+        params.y = 200
 
         windowManager?.addView(
             floatingView,
             params
         )
-
-        updateText(
-            "🟢 监听中"
-        )
     }
 
-    fun hide(
-        context: Context
-    ) {
+    fun hide() {
 
-        if (floatingView != null) {
+        if (
+            floatingView != null
+        ) {
 
             windowManager?.removeView(
                 floatingView
@@ -168,10 +96,19 @@ object FloatingWindowManager {
         }
     }
 
-    fun updateText(
-        text: String
-    ) {
+    fun updateText(text: String) {
 
-        textView?.text = text
+        textView?.post {
+
+            val old =
+                textView?.text?.toString()
+                    ?: ""
+
+            val newText =
+                "$text\n\n$old"
+
+            textView?.text =
+                newText.take(1200)
+        }
     }
 }
