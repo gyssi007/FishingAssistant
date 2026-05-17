@@ -18,7 +18,6 @@ class LoginActivity : AppCompatActivity() {
         private const val TAG = "FishingAssistant"
     }
 
-    private lateinit var usernameEdit: EditText
     private lateinit var passwordEdit: EditText
     private lateinit var loginButton: Button
 
@@ -29,27 +28,23 @@ class LoginActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_login)
 
-        usernameEdit = findViewById(R.id.usernameEdit)
         passwordEdit = findViewById(R.id.passwordEdit)
         loginButton = findViewById(R.id.loginButton)
 
         loginButton.setOnClickListener {
-            val username = usernameEdit.text.toString().trim()
             val password = passwordEdit.text.toString().trim()
 
-            if (username.isEmpty() || password.isEmpty()) {
-                Toast.makeText(this, "请输入用户名和密码", Toast.LENGTH_SHORT).show()
+            if (password.isEmpty()) {
+                Toast.makeText(this, "请输入访问密码", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
-            doLogin(username, password)
+            doLogin(password)
         }
     }
 
-    private fun doLogin(username: String, password: String) {
-
+    private fun doLogin(password: String) {
         val json = JSONObject()
-        json.put("username", username)
         json.put("password", password)
 
         val requestBody = RequestBody.create(
@@ -58,7 +53,7 @@ class LoginActivity : AppCompatActivity() {
         )
 
         val request = Request.Builder()
-            .url("https://fishing.gysssi.com/api/login") // 登录接口
+            .url("https://fishing.gysssi.com/api/login")
             .addHeader("User-Agent", "Mozilla/5.0")
             .post(requestBody)
             .build()
@@ -78,7 +73,7 @@ class LoginActivity : AppCompatActivity() {
 
                     if (!response.isSuccessful) {
                         runOnUiThread {
-                            Toast.makeText(this@LoginActivity, "用户名或密码错误", Toast.LENGTH_LONG).show()
+                            Toast.makeText(this@LoginActivity, "密码错误", Toast.LENGTH_LONG).show()
                         }
                         return
                     }
