@@ -74,18 +74,36 @@ class FishingAccessibilityService :
         }
 
         val root =
-            rootInActiveWindow ?: return
+            rootInActiveWindow
+
+        if (root == null) {
+
+            FloatingWindowManager.updateText(
+                "❌ root为空"
+            )
+
+            return
+        }
 
         FloatingWindowManager.updateText(
-            "🔍 AI识别页面"
+            "🔍 扫描页面"
         )
 
         val found =
             findPageTitle(root)
 
         if (!found) {
+
+            FloatingWindowManager.updateText(
+                "⚠️ 非钓位页面"
+            )
+
             return
         }
+
+        FloatingWindowManager.updateText(
+            "✅ 已进入钓位页面"
+        )
 
         val numbers =
             extractNumbers(root)
@@ -93,6 +111,10 @@ class FishingAccessibilityService :
         Log.d(
             TAG,
             "识别号码: $numbers"
+        )
+
+        FloatingWindowManager.updateText(
+            "🎯 识别号码: $numbers"
         )
 
         if (numbers.size < 2) {
@@ -114,14 +136,15 @@ class FishingAccessibilityService :
         if (
             current == lastSeats
         ) {
+
+            FloatingWindowManager.updateText(
+                "⚠️ 本轮已分析过"
+            )
+
             return
         }
 
         lastSeats = current
-
-        FloatingWindowManager.updateText(
-            "🎯 二选一: $seatA / $seatB"
-        )
 
         isAnalyzing.set(true)
 
@@ -146,6 +169,24 @@ class FishingAccessibilityService :
                         "merchant_id",
                         ""
                     ) ?: ""
+
+                FloatingWindowManager.updateText(
+                    """
+🎣 二选一识别成功
+
+A号:
+$seatA
+
+B号:
+$seatB
+
+Cookie长度:
+${cookie.length}
+
+钓场ID:
+$merId
+"""
+                )
 
                 Log.d(
                     TAG,
@@ -184,12 +225,7 @@ class FishingAccessibilityService :
                 }
 
                 FloatingWindowManager.updateText(
-                    "🤖 AI分析中"
-                )
-
-                Log.d(
-                    TAG,
-                    "开始分析: $seatA / $seatB"
+                    "🌐 请求A号数据"
                 )
 
                 val summaryA =
@@ -198,6 +234,10 @@ class FishingAccessibilityService :
                         merId,
                         seatA
                     )
+
+                FloatingWindowManager.updateText(
+                    "🌐 请求B号数据"
+                )
 
                 val summaryB =
                     ApiClient.getSeatSummary(
@@ -212,13 +252,27 @@ class FishingAccessibilityService :
                 ) {
 
                     FloatingWindowManager.updateText(
-                        "❌ 分析接口失败"
+                        "❌ 接口返回为空"
                     )
 
                     isAnalyzing.set(false)
 
                     return@Thread
                 }
+
+                FloatingWindowManager.updateText(
+                    """
+📊 AI分析完成
+
+A命中率:
+${summaryA.hitRate}
+
+B命中率:
+${summaryB.hitRate}
+
+开始生成推荐...
+"""
+                )
 
                 val recommend =
                     SeatAnalyzer.analyze(
@@ -236,10 +290,17 @@ class FishingAccessibilityService :
                 )
 
                 FloatingWindowManager.updateText(
-                    "✅ 推荐: $recommend"
+                    """
+🏆 AI推荐完成
+
+推荐:
+$recommend号
+
+开始自动点击...
+"""
                 )
 
-                Thread.sleep(800)
+                Thread.sleep(1000)
 
                 autoClick(
                     root,
@@ -251,7 +312,11 @@ class FishingAccessibilityService :
                 e.printStackTrace()
 
                 FloatingWindowManager.updateText(
-                    "❌ AI分析异常"
+                    """
+❌ AI分析异常
+
+${e.message}
+"""
                 )
 
             } finally {
@@ -411,13 +476,17 @@ class FishingAccessibilityService :
         try {
 
             FloatingWindowManager.updateText(
-                "⚡ 自动点击中"
+                "⚡ 查找钓位按钮"
             )
 
             val seatNodes =
                 root.findAccessibilityNodeInfosByText(
                     seatNumber
                 )
+
+            FloatingWindowManager.updateText(
+                "🔍 找到节点数量: ${seatNodes.size}"
+            )
 
             if (seatNodes.isEmpty()) {
 
@@ -436,6 +505,10 @@ class FishingAccessibilityService :
                     findClickableParent(node)
 
                 if (target != null) {
+
+                    FloatingWindowManager.updateText(
+                        "🖱️ 尝试点击"
+                    )
 
                     clicked =
                         target.performAction(
@@ -458,10 +531,10 @@ class FishingAccessibilityService :
             }
 
             FloatingWindowManager.updateText(
-                "✅ 已选择 $seatNumber"
+                "✅ 已点击 $seatNumber"
             )
 
-            Thread.sleep(1000)
+            Thread.sleep(1200)
 
             val confirmTexts =
                 listOf(
@@ -477,6 +550,10 @@ class FishingAccessibilityService :
                 false
 
             for (text in confirmTexts) {
+
+                FloatingWindowManager.updateText(
+                    "🔍 查找确认按钮: $text"
+                )
 
                 val confirmNodes =
                     root.findAccessibilityNodeInfosByText(
@@ -509,7 +586,7 @@ class FishingAccessibilityService :
             if (confirmClicked) {
 
                 FloatingWindowManager.updateText(
-                    "✅ 已自动确认"
+                    "🎉 自动确认成功"
                 )
 
             } else {
@@ -524,7 +601,11 @@ class FishingAccessibilityService :
             e.printStackTrace()
 
             FloatingWindowManager.updateText(
-                "❌ 自动点击异常"
+                """
+❌ 自动点击异常
+
+${e.message}
+"""
             )
         }
     }
