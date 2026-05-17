@@ -4,171 +4,352 @@ import android.accessibilityservice.AccessibilityService
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.util.Log
-import java.util.Timer
-import java.util.TimerTask
 
 class FishingAccessibilityService : AccessibilityService() {
 
-    companion object {
-        private const val TAG = "FishingAssistant"
-        private const val KEY_WORD = "我的钓位"
-        private const val POLL_INTERVAL = 500L
-    }
+    override fun onAccessibilityEvent(
+        event: AccessibilityEvent?
+    ) {
 
-    @Volatile
-    private var isProcessing = false
+        if (!AppState.isRunning) {
+            return
+        }
 
-    private var pollTimer: Timer? = null
-
-    override fun onServiceConnected() {
-        super.onServiceConnected()
-        Log.d(TAG, "无障碍服务已启动，开始持续监听屏幕")
-        startPolling()
-    }
-
-    override fun onInterrupt() {}
-
-    override fun onDestroy() {
-        super.onDestroy()
-        stopPolling()
-    }
-
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        val type = event?.eventType ?: return
         if (
-            type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
-            type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
-            type == AccessibilityEvent.TYPE_VIEW_CLICKED ||
-            type == AccessibilityEvent.TYPE_ANNOUNCEMENT
+            event?.eventType ==
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            ||
+            event?.eventType ==
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
         ) {
-            handleScan()
+
+            scanPage()
         }
     }
 
-    private fun startPolling() {
-        stopPolling()
-        pollTimer = Timer()
-        pollTimer?.scheduleAtFixedRate(object : TimerTask() {
-            override fun run() {
-                handleScan()
-            }
-        }, 0, POLL_INTERVAL)
+    override fun onInterrupt() {
+
     }
 
-    private fun stopPolling() {
-        pollTimer?.cancel()
-        pollTimer = null
-    }
+    private fun scanPage() {
 
-    // ────────────────────────────────────────
-    // 核心：扫描所有窗口，不只是活跃窗口
-    // ────────────────────────────────────────
+        val root =
+            rootInActiveWindow ?: return
 
-    private fun handleScan() {
+        val found =
+            findPageTitle(root)
 
-        if (isProcessing) return
-        isProcessing = true
+        if (!found) {
+            return
+        }
 
-        try {
+        val numbers =
+            extractNumbers(root)
 
-            // ★ 获取所有窗口列表
-            val allWindows = windows
+        if (numbers.size < 2) {
 
-            if (allWindows.isNullOrEmpty()) {
-                // 降级：只用 rootInActiveWindow
-                val root = rootInActiveWindow
-                if (root != null) scanNode(root)
-            } else {
-                // 遍历所有窗口，找「我的钓位」
-                for (window in allWindows) {
-                    val root = window.root ?: continue
-                    if (scanNode(root)) break
+            FloatingWindowManager.updateText(
+                "❌ 未识别到二选一"
+            )
+
+            return
+        }
+
+        val seatA = numbers[0]
+
+        val seatB = numbers[1]
+
+        FloatingWindowManager.updateText(
+            "🎯 识别到 $seatA / $seatB"
+        )
+
+        Thread {
+
+            try {
+
+                FloatingWindowManager.updateText(
+                    "🤖 AI分析中..."
+                )
+
+                val prefs =
+                    getSharedPreferences(
+                        "app",
+                        MODE_PRIVATE
+                    )
+
+                val cookie =
+                    prefs.getString(
+                        "cookie",
+                        ""
+                    ) ?: ""
+
+                val merId =
+                    prefs.getString(
+                        "merchant_id",
+                        ""
+                    ) ?: ""
+
+                if (
+                    cookie.isEmpty()
+                ) {
+
+                    FloatingWindowManager.updateText(
+                        "❌ Cookie为空"
+                    )
+
+                    return@Thread
                 }
+
+                if (
+                    merId.isEmpty()
+                ) {
+
+                    FloatingWindowManager.updateText(
+                        "❌ 未选择钓场"
+                    )
+
+                    return@Thread
+                }
+
+                val summaryA =
+                    ApiClient.getSeatSummary(
+                        cookie,
+                        merId,
+                        seatA
+                    )
+
+                val summaryB =
+                    ApiClient.getSeatSummary(
+                        cookie,
+                        merId,
+                        seatB
+                    )
+
+                if (
+                    summaryA == null ||
+                    summaryB == null
+                ) {
+
+                    FloatingWindowManager.updateText(
+                        "❌ 接口分析失败"
+                    )
+
+                    return@Thread
+                }
+
+                val recommend =
+                    SeatAnalyzer.analyze(
+
+                        seatA,
+                        summaryA,
+
+                        seatB,
+                        summaryB
+                    )
+
+                FloatingWindowManager.updateText(
+                    "✅ 推荐 $recommend 号"
+                )
+
+                Thread.sleep(800)
+
+                autoClick(
+                    root,
+                    recommend
+                )
+
+            } catch (e: Exception) {
+
+                e.printStackTrace()
+
+                FloatingWindowManager.updateText(
+                    "❌ 网络异常"
+                )
             }
 
-        } catch (e: Exception) {
-            Log.e(TAG, "扫描异常: ${e.message}")
-        } finally {
-            isProcessing = false
-        }
+        }.start()
     }
 
-    // 扫描单个节点树，找到返回true
-    private fun scanNode(root: AccessibilityNodeInfo): Boolean {
-
-        if (!findText(root, KEY_WORD)) return false
-
-        Log.d(TAG, "检测到「我的钓位」页面")
-
-        val numbers = extractNumbers(root)
-
-        if (numbers.size >= 2) {
-            val seatA = numbers[0]
-            val seatB = numbers[1]
-            Log.d(TAG, "识别到: $seatA / $seatB")
-            FloatingWindowManager.updateText("🎯 识别到 $seatA / $seatB")
-            return true
-        }
-
-        Log.d(TAG, "找到关键词但数字不足: $numbers")
-        return false
-    }
-
-    // ────────────────────────────────────────
-    // 查找包含目标文字的节点
-    // ────────────────────────────────────────
-
-    private fun findText(
-        node: AccessibilityNodeInfo,
-        target: String
+    private fun findPageTitle(
+        node: AccessibilityNodeInfo
     ): Boolean {
 
-        val text = node.text?.toString() ?: ""
-        val desc = node.contentDescription?.toString() ?: ""
+        val keywords =
+            listOf(
 
-        if (text.contains(target) || desc.contains(target)) return true
+                "我的钓位",
+
+                "选择钓位",
+
+                "请选择钓位"
+            )
+
+        val text =
+            node.text?.toString() ?: ""
+
+        for (keyword in keywords) {
+
+            if (
+                text.contains(keyword)
+            ) {
+
+                return true
+            }
+        }
 
         for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            if (findText(child, target)) return true
+
+            val child =
+                node.getChild(i)
+
+            if (child != null) {
+
+                val result =
+                    findPageTitle(child)
+
+                if (result) {
+
+                    return true
+                }
+            }
         }
 
         return false
     }
-
-    // ────────────────────────────────────────
-    // 提取 1~99 的数字
-    // ────────────────────────────────────────
 
     private fun extractNumbers(
         node: AccessibilityNodeInfo
     ): List<String> {
 
-        val result = mutableListOf<String>()
-        recursiveExtract(node, result)
+        val result =
+            mutableListOf<String>()
 
-        return result.distinct().filter {
-            try {
-                it.toInt() in 1..99
-            } catch (e: Exception) {
-                false
+        recursiveExtract(
+            node,
+            result
+        )
+
+        return result
+            .distinct()
+            .filter {
+
+                try {
+
+                    val num =
+                        it.toInt()
+
+                    num in 1..99
+
+                } catch (e: Exception) {
+
+                    false
+                }
+            }
+            .take(2)
+    }
+
+    private fun recursiveExtract(
+
+        node: AccessibilityNodeInfo,
+
+        result: MutableList<String>
+
+    ) {
+
+        val text =
+            node.text?.toString()
+                ?: ""
+
+        if (
+            text.matches(
+                Regex("^\\d{1,2}$")
+            )
+        ) {
+
+            result.add(text)
+        }
+
+        for (i in 0 until node.childCount) {
+
+            val child =
+                node.getChild(i)
+
+            if (child != null) {
+
+                recursiveExtract(
+                    child,
+                    result
+                )
             }
         }
     }
 
-    private fun recursiveExtract(
-        node: AccessibilityNodeInfo,
-        result: MutableList<String>
+    private fun autoClick(
+
+        root: AccessibilityNodeInfo,
+
+        seatNumber: String
+
     ) {
-        val text = node.text?.toString() ?: ""
-        val desc = node.contentDescription?.toString() ?: ""
 
-        if (text.matches(Regex("^\\d{1,2}$"))) result.add(text)
-        if (desc.matches(Regex("^\\d{1,2}$"))) result.add(desc)
+        try {
 
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            recursiveExtract(child, result)
+            val seatNodes =
+                root.findAccessibilityNodeInfosByText(
+                    seatNumber
+                )
+
+            if (
+                seatNodes.isNotEmpty()
+            ) {
+
+                seatNodes[0].performAction(
+                    AccessibilityNodeInfo.ACTION_CLICK
+                )
+
+                FloatingWindowManager.updateText(
+                    "✅ 已选择 $seatNumber 号"
+                )
+
+                Thread.sleep(500)
+
+                val confirmNodes =
+                    root.findAccessibilityNodeInfosByText(
+                        "确定"
+                    )
+
+                if (
+                    confirmNodes.isNotEmpty()
+                ) {
+
+                    confirmNodes[0].performAction(
+                        AccessibilityNodeInfo.ACTION_CLICK
+                    )
+
+                    FloatingWindowManager.updateText(
+                        "✅ 已自动确认"
+                    )
+                } else {
+
+                    FloatingWindowManager.updateText(
+                        "❌ 未找到确定按钮"
+                    )
+                }
+
+            } else {
+
+                FloatingWindowManager.updateText(
+                    "❌ 未找到钓位按钮"
+                )
+            }
+
+        } catch (e: Exception) {
+
+            e.printStackTrace()
+
+            FloatingWindowManager.updateText(
+                "❌ 自动点击失败"
+            )
         }
     }
 }
