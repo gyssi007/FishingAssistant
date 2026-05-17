@@ -1,43 +1,130 @@
 package com.fishtime.assistant
 
-import android.app.Service
-import android.content.Intent
-import android.os.IBinder
+import android.content.Context
+import android.graphics.PixelFormat
+import android.os.Build
+import android.view.Gravity
+import android.view.LayoutInflater
+import android.view.View
+import android.view.WindowManager
+import android.widget.TextView
 
-class FloatingWindowService : Service() {
+object FloatingWindowManager {
 
-    override fun onBind(
-        intent: Intent?
-    ): IBinder? {
+    private var windowManager:
+        WindowManager? = null
 
-        return null
+    private var floatingView:
+        View? = null
+
+    private var textView:
+        TextView? = null
+
+    fun show(
+        context: Context
+    ) {
+
+        if (
+            floatingView != null
+        ) {
+            return
+        }
+
+        windowManager =
+            context.getSystemService(
+                Context.WINDOW_SERVICE
+            ) as WindowManager
+
+        floatingView =
+            LayoutInflater.from(context)
+                .inflate(
+                    R.layout.layout_floating_window,
+                    null
+                )
+
+        textView =
+            floatingView!!.findViewById(
+                R.id.floatText
+            )
+
+        val params =
+            WindowManager.LayoutParams(
+
+                WindowManager.LayoutParams.WRAP_CONTENT,
+
+                WindowManager.LayoutParams.WRAP_CONTENT,
+
+                if (
+                    Build.VERSION.SDK_INT >=
+                    Build.VERSION_CODES.O
+                )
+
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+
+                else
+
+                    WindowManager.LayoutParams.TYPE_PHONE,
+
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+
+                PixelFormat.TRANSLUCENT
+            )
+
+        params.gravity =
+            Gravity.TOP or Gravity.START
+
+        params.x = 20
+
+        params.y = 180
+
+        windowManager?.addView(
+            floatingView,
+            params
+        )
     }
 
-    override fun onCreate() {
+    fun hide() {
 
-        super.onCreate()
+        try {
 
-        // 显示悬浮窗
+            if (
+                floatingView != null
+            ) {
 
-        FloatingWindowManager.show(
-            this
-        )
+                windowManager?.removeView(
+                    floatingView
+                )
 
-        // 初始文字
+                floatingView = null
+            }
 
-        FloatingWindowManager.updateText(
-            "🟢 监听中"
-        )
+        } catch (e: Exception) {
+
+            e.printStackTrace()
+        }
     }
 
-    override fun onDestroy() {
+    fun updateText(
+        text: String
+    ) {
 
-        super.onDestroy()
+        textView?.post {
 
-        // 隐藏悬浮窗
+            val oldText =
+                textView?.text?.toString()
+                    ?: ""
 
-        FloatingWindowManager.hide(
-            this
-        )
+            val newText =
+                """
+$text
+
+────────────────
+
+$oldText
+"""
+
+            textView?.text =
+                newText.take(2000)
+        }
     }
 }
