@@ -3,12 +3,7 @@
 <accessibility-service
     xmlns:android="http://schemas.android.com/apk/res/android"
 
-    android:accessibilityEventTypes="
-        typeWindowStateChanged|
-        typeWindowContentChanged|
-        typeViewClicked|
-        typeAnnouncement|
-        typeAllMask"
+    android:accessibilityEventTypes="typeAllMask"
 
     android:accessibilityFeedbackType="feedbackGeneric"
 
@@ -18,6 +13,7 @@
 
     android:accessibilityFlags="
         flagReportViewIds|
-        flagRetrieveInteractiveWindows"
+        flagRetrieveInteractiveWindows|
+        flagRequestEnhancedWebAccessibility"
 
     android:description="@string/accessibility_desc"/>
