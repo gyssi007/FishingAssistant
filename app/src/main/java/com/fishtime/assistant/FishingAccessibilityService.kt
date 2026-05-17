@@ -99,7 +99,7 @@ class FishingAccessibilityService : AccessibilityService() {
 
         val request = Request.Builder()
 
-            .url("https://你的接口/api/analyze")
+            .url("https://fishing.gysssi.com/api/analyze")
 
             .addHeader("Cookie", cookie)
 
