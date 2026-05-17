@@ -43,7 +43,7 @@ class FishingAccessibilityService : AccessibilityService() {
             try {
                 FloatingWindowManager.updateText("🤖 AI分析中...")
 
-                val prefs = getSharedPreferences("FishingAssistant", MODE_PRIVATE)
+                val prefs = getSharedPreferences("app", MODE_PRIVATE)
                 val cookie = prefs.getString("cookie", "") ?: ""
                 val merId = prefs.getString("merchant_id", "") ?: ""
 
