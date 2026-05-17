@@ -12,18 +12,13 @@ class FishingAccessibilityService : AccessibilityService() {
     companion object {
         private const val TAG = "FishingAssistant"
         private const val KEY_WORD = "我的钓位"
-        private const val POLL_INTERVAL = 500L // 每0.5秒扫一次
+        private const val POLL_INTERVAL = 500L
     }
 
     @Volatile
     private var isProcessing = false
 
     private var pollTimer: Timer? = null
-
-    // ────────────────────────────────────────
-    // 服务一启动就开始持续扫描
-    // 不依赖「开始监听」按钮
-    // ────────────────────────────────────────
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -36,17 +31,10 @@ class FishingAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         stopPolling()
-        Log.d(TAG, "无障碍服务已停止")
     }
 
-    // ────────────────────────────────────────
-    // 事件触发时也立即扫描（双保险）
-    // ────────────────────────────────────────
-
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-
         val type = event?.eventType ?: return
-
         if (
             type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
             type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
@@ -56,11 +44,6 @@ class FishingAccessibilityService : AccessibilityService() {
             handleScan()
         }
     }
-
-    // ────────────────────────────────────────
-    // 定时轮询：每0.5秒主动扫描
-    // 不判断 AppState.isRunning
-    // ────────────────────────────────────────
 
     private fun startPolling() {
         stopPolling()
@@ -78,18 +61,42 @@ class FishingAccessibilityService : AccessibilityService() {
     }
 
     // ────────────────────────────────────────
-    // 核心扫描
+    // 核心：扫描所有窗口，不只是活跃窗口
     // ────────────────────────────────────────
 
     private fun handleScan() {
 
         if (isProcessing) return
-
-        val root = rootInActiveWindow ?: return
-
-        if (!findText(root, KEY_WORD)) return
-
         isProcessing = true
+
+        try {
+
+            // ★ 获取所有窗口列表
+            val allWindows = windows
+
+            if (allWindows.isNullOrEmpty()) {
+                // 降级：只用 rootInActiveWindow
+                val root = rootInActiveWindow
+                if (root != null) scanNode(root)
+            } else {
+                // 遍历所有窗口，找「我的钓位」
+                for (window in allWindows) {
+                    val root = window.root ?: continue
+                    if (scanNode(root)) break
+                }
+            }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "扫描异常: ${e.message}")
+        } finally {
+            isProcessing = false
+        }
+    }
+
+    // 扫描单个节点树，找到返回true
+    private fun scanNode(root: AccessibilityNodeInfo): Boolean {
+
+        if (!findText(root, KEY_WORD)) return false
 
         Log.d(TAG, "检测到「我的钓位」页面")
 
@@ -100,11 +107,11 @@ class FishingAccessibilityService : AccessibilityService() {
             val seatB = numbers[1]
             Log.d(TAG, "识别到: $seatA / $seatB")
             FloatingWindowManager.updateText("🎯 识别到 $seatA / $seatB")
-        } else {
-            Log.d(TAG, "找到关键词但数字不足: $numbers")
+            return true
         }
 
-        isProcessing = false
+        Log.d(TAG, "找到关键词但数字不足: $numbers")
+        return false
     }
 
     // ────────────────────────────────────────
@@ -119,9 +126,7 @@ class FishingAccessibilityService : AccessibilityService() {
         val text = node.text?.toString() ?: ""
         val desc = node.contentDescription?.toString() ?: ""
 
-        if (text.contains(target) || desc.contains(target)) {
-            return true
-        }
+        if (text.contains(target) || desc.contains(target)) return true
 
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
