@@ -44,7 +44,6 @@ class FishingAccessibilityService :
                 val now =
                     SystemClock.elapsedRealtime()
 
-                // 节流
                 if (
                     now - lastScanTime < 1200
                 ) {
@@ -91,6 +90,11 @@ class FishingAccessibilityService :
         val numbers =
             extractNumbers(root)
 
+        Log.d(
+            TAG,
+            "识别号码: $numbers"
+        )
+
         if (numbers.size < 2) {
 
             FloatingWindowManager.updateText(
@@ -106,8 +110,6 @@ class FishingAccessibilityService :
 
         val current =
             "$seatA-$seatB"
-
-        // 防重复分析
 
         if (
             current == lastSeats
@@ -144,6 +146,16 @@ class FishingAccessibilityService :
                         "merchant_id",
                         ""
                     ) ?: ""
+
+                Log.d(
+                    TAG,
+                    "Cookie长度: ${cookie.length}"
+                )
+
+                Log.d(
+                    TAG,
+                    "钓场ID: $merId"
+                )
 
                 if (
                     cookie.isEmpty()
@@ -217,6 +229,11 @@ class FishingAccessibilityService :
                         seatB,
                         summaryB
                     )
+
+                Log.d(
+                    TAG,
+                    "推荐结果: $recommend"
+                )
 
                 FloatingWindowManager.updateText(
                     "✅ 推荐: $recommend"
@@ -402,9 +419,7 @@ class FishingAccessibilityService :
                     seatNumber
                 )
 
-            if (
-                seatNodes.isEmpty()
-            ) {
+            if (seatNodes.isEmpty()) {
 
                 FloatingWindowManager.updateText(
                     "❌ 未找到钓位"
@@ -413,18 +428,40 @@ class FishingAccessibilityService :
                 return
             }
 
-            val seatNode =
-                seatNodes[0]
+            var clicked = false
 
-            seatNode.performAction(
-                AccessibilityNodeInfo.ACTION_CLICK
-            )
+            for (node in seatNodes) {
+
+                val target =
+                    findClickableParent(node)
+
+                if (target != null) {
+
+                    clicked =
+                        target.performAction(
+                            AccessibilityNodeInfo.ACTION_CLICK
+                        )
+
+                    if (clicked) {
+                        break
+                    }
+                }
+            }
+
+            if (!clicked) {
+
+                FloatingWindowManager.updateText(
+                    "❌ 钓位无法点击"
+                )
+
+                return
+            }
 
             FloatingWindowManager.updateText(
                 "✅ 已选择 $seatNumber"
             )
 
-            Thread.sleep(600)
+            Thread.sleep(1000)
 
             val confirmTexts =
                 listOf(
@@ -436,7 +473,7 @@ class FishingAccessibilityService :
                     "提交"
                 )
 
-            var clicked =
+            var confirmClicked =
                 false
 
             for (text in confirmTexts) {
@@ -446,24 +483,33 @@ class FishingAccessibilityService :
                         text
                     )
 
-                if (
-                    confirmNodes.isNotEmpty()
-                ) {
+                for (node in confirmNodes) {
 
-                    confirmNodes[0].performAction(
-                        AccessibilityNodeInfo.ACTION_CLICK
-                    )
+                    val target =
+                        findClickableParent(node)
 
-                    clicked = true
+                    if (target != null) {
 
+                        confirmClicked =
+                            target.performAction(
+                                AccessibilityNodeInfo.ACTION_CLICK
+                            )
+
+                        if (confirmClicked) {
+                            break
+                        }
+                    }
+                }
+
+                if (confirmClicked) {
                     break
                 }
             }
 
-            if (clicked) {
+            if (confirmClicked) {
 
                 FloatingWindowManager.updateText(
-                    "✅ 自动确认成功"
+                    "✅ 已自动确认"
                 )
 
             } else {
@@ -478,8 +524,33 @@ class FishingAccessibilityService :
             e.printStackTrace()
 
             FloatingWindowManager.updateText(
-                "❌ 自动点击失败"
+                "❌ 自动点击异常"
             )
         }
+    }
+
+    // ─────────────────────────────
+    // 查找可点击父节点
+    // ─────────────────────────────
+
+    private fun findClickableParent(
+
+        node: AccessibilityNodeInfo?
+
+    ): AccessibilityNodeInfo? {
+
+        var current = node
+
+        while (current != null) {
+
+            if (current.isClickable) {
+
+                return current
+            }
+
+            current = current.parent
+        }
+
+        return null
     }
 }
