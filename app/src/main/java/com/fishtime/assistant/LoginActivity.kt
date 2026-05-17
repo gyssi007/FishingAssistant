@@ -18,6 +18,7 @@ class LoginActivity : AppCompatActivity() {
         private const val TAG = "FishingAssistant"
     }
 
+    private lateinit var usernameEdit: EditText
     private lateinit var passwordEdit: EditText
     private lateinit var loginButton: Button
 
@@ -28,33 +29,27 @@ class LoginActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_login)
 
+        usernameEdit = findViewById(R.id.usernameEdit)
         passwordEdit = findViewById(R.id.passwordEdit)
         loginButton = findViewById(R.id.loginButton)
 
         loginButton.setOnClickListener {
+            val username = usernameEdit.text.toString().trim()
+            val password = passwordEdit.text.toString().trim()
 
-            val password =
-                passwordEdit.text.toString().trim()
-
-            if (password.isEmpty()) {
-
-                Toast.makeText(
-                    this,
-                    "请输入密码",
-                    Toast.LENGTH_SHORT
-                ).show()
-
+            if (username.isEmpty() || password.isEmpty()) {
+                Toast.makeText(this, "请输入用户名和密码", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
-            login(password)
+            doLogin(username, password)
         }
     }
 
-    private fun login(password: String) {
+    private fun doLogin(username: String, password: String) {
 
         val json = JSONObject()
-
+        json.put("username", username)
         json.put("password", password)
 
         val requestBody = RequestBody.create(
@@ -63,127 +58,60 @@ class LoginActivity : AppCompatActivity() {
         )
 
         val request = Request.Builder()
-
-            // 改成你的真实接口
-            .url("https://fishing.gysssi.com/api/login")
-
+            .url("https://fishing.gysssi.com/api/login") // 登录接口
+            .addHeader("User-Agent", "Mozilla/5.0")
             .post(requestBody)
-
-            .addHeader(
-                "User-Agent",
-                "Mozilla/5.0"
-            )
-
             .build()
 
         client.newCall(request).enqueue(object : Callback {
-
             override fun onFailure(call: Call, e: IOException) {
-
                 runOnUiThread {
-
-                    Toast.makeText(
-                        this@LoginActivity,
-                        "登录失败: ${e.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
+                    Toast.makeText(this@LoginActivity, "登录失败: ${e.message}", Toast.LENGTH_LONG).show()
                 }
-
                 Log.e(TAG, "登录失败: ${e.message}")
             }
 
-            override fun onResponse(
-                call: Call,
-                response: Response
-            ) {
-
+            override fun onResponse(call: Call, response: Response) {
                 try {
-
-                    val body =
-                        response.body?.string() ?: ""
-
-                    Log.d(TAG, "返回: $body")
+                    val body = response.body?.string() ?: ""
+                    Log.d(TAG, "登录返回: $body")
 
                     if (!response.isSuccessful) {
-
                         runOnUiThread {
-
-                            Toast.makeText(
-                                this@LoginActivity,
-                                "密码错误",
-                                Toast.LENGTH_LONG
-                            ).show()
+                            Toast.makeText(this@LoginActivity, "用户名或密码错误", Toast.LENGTH_LONG).show()
                         }
-
                         return
                     }
 
-                    val cookies =
-                        response.headers("Set-Cookie")
-
+                    // 解析 cookie
+                    val cookies = response.headers("Set-Cookie")
                     val cookie = cookies.mapNotNull {
-
-                        it.substringBefore(";")
-                            .takeIf { part ->
-                                part.contains("=")
-                            }
-
+                        it.substringBefore(";").takeIf { it.contains("=") }
                     }.joinToString("; ")
 
-                    Log.d(TAG, "Cookie: $cookie")
-
                     if (cookie.isEmpty()) {
-
                         runOnUiThread {
-
-                            Toast.makeText(
-                                this@LoginActivity,
-                                "Cookie获取失败",
-                                Toast.LENGTH_LONG
-                            ).show()
+                            Toast.makeText(this@LoginActivity, "获取Cookie失败", Toast.LENGTH_LONG).show()
                         }
-
                         return
                     }
 
-                    getSharedPreferences(
-                        "app",
-                        MODE_PRIVATE
-                    ).edit()
-
+                    // 保存 cookie 和登录状态
+                    getSharedPreferences("app", MODE_PRIVATE).edit()
                         .putString("cookie", cookie)
-
+                        .putBoolean("logged_in", true)
                         .apply()
 
                     runOnUiThread {
-
-                        Toast.makeText(
-                            this@LoginActivity,
-                            "登录成功",
-                            Toast.LENGTH_SHORT
-                        ).show()
-
-                        startActivity(
-                            Intent(
-                                this@LoginActivity,
-                                MainActivity::class.java
-                            )
-                        )
-
+                        Toast.makeText(this@LoginActivity, "登录成功", Toast.LENGTH_SHORT).show()
+                        startActivity(Intent(this@LoginActivity, MainActivity::class.java))
                         finish()
                     }
 
                 } catch (e: Exception) {
-
                     runOnUiThread {
-
-                        Toast.makeText(
-                            this@LoginActivity,
-                            "解析失败: ${e.message}",
-                            Toast.LENGTH_LONG
-                        ).show()
+                        Toast.makeText(this@LoginActivity, "解析失败: ${e.message}", Toast.LENGTH_LONG).show()
                     }
-
                     Log.e(TAG, "解析失败: ${e.message}")
                 }
             }
