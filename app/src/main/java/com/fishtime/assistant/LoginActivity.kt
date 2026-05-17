@@ -8,6 +8,7 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import org.json.JSONObject
 import java.io.IOException
 
@@ -17,66 +18,61 @@ class LoginActivity : AppCompatActivity() {
         private const val TAG = "FishingAssistant"
     }
 
-    private lateinit var etUsername: EditText
-    private lateinit var etPassword: EditText
-    private lateinit var btnLogin: Button
+    private lateinit var passwordEdit: EditText
+    private lateinit var loginButton: Button
 
-    private val client = OkHttpClient.Builder()
-        .retryOnConnectionFailure(true)
-        .build()
+    private val client = OkHttpClient()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         setContentView(R.layout.activity_login)
 
-        etUsername = findViewById(R.id.etUsername)
-        etPassword = findViewById(R.id.etPassword)
-        btnLogin = findViewById(R.id.btnLogin)
+        passwordEdit = findViewById(R.id.passwordEdit)
+        loginButton = findViewById(R.id.loginButton)
 
-        btnLogin.setOnClickListener {
+        loginButton.setOnClickListener {
 
-            val username = etUsername.text.toString().trim()
-            val password = etPassword.text.toString().trim()
+            val password =
+                passwordEdit.text.toString().trim()
 
-            if (username.isEmpty() || password.isEmpty()) {
+            if (password.isEmpty()) {
 
                 Toast.makeText(
                     this,
-                    "请输入账号密码",
+                    "请输入密码",
                     Toast.LENGTH_SHORT
                 ).show()
 
                 return@setOnClickListener
             }
 
-            login(username, password)
+            login(password)
         }
     }
 
-    private fun login(username: String, password: String) {
+    private fun login(password: String) {
 
-        val json = JSONObject().apply {
+        val json = JSONObject()
 
-            put("username", username)
-            put("password", password)
-        }
-
-        val mediaType = MediaType.parse("application/json; charset=utf-8")
+        json.put("password", password)
 
         val requestBody = RequestBody.create(
-            mediaType,
+            "application/json".toMediaTypeOrNull(),
             json.toString()
         )
 
         val request = Request.Builder()
 
-            // 修改成你的真实登录接口
+            // 改成你的真实接口
             .url("https://你的接口地址/api/login")
 
-            .addHeader("User-Agent", "Mozilla/5.0")
-
             .post(requestBody)
+
+            .addHeader(
+                "User-Agent",
+                "Mozilla/5.0"
+            )
 
             .build()
 
@@ -96,13 +92,17 @@ class LoginActivity : AppCompatActivity() {
                 Log.e(TAG, "登录失败: ${e.message}")
             }
 
-            override fun onResponse(call: Call, response: Response) {
+            override fun onResponse(
+                call: Call,
+                response: Response
+            ) {
 
                 try {
 
-                    val body = response.body()?.string() ?: ""
+                    val body =
+                        response.body?.string() ?: ""
 
-                    Log.d(TAG, "登录返回: $body")
+                    Log.d(TAG, "返回: $body")
 
                     if (!response.isSuccessful) {
 
@@ -110,7 +110,7 @@ class LoginActivity : AppCompatActivity() {
 
                             Toast.makeText(
                                 this@LoginActivity,
-                                "账号或密码错误",
+                                "密码错误",
                                 Toast.LENGTH_LONG
                             ).show()
                         }
@@ -118,9 +118,8 @@ class LoginActivity : AppCompatActivity() {
                         return
                     }
 
-                    val cookies = response.headers("Set-Cookie")
-
-                    Log.d(TAG, "原始Cookies: $cookies")
+                    val cookies =
+                        response.headers("Set-Cookie")
 
                     val cookie = cookies.mapNotNull {
 
@@ -131,7 +130,7 @@ class LoginActivity : AppCompatActivity() {
 
                     }.joinToString("; ")
 
-                    Log.d(TAG, "最终Cookie: $cookie")
+                    Log.d(TAG, "Cookie: $cookie")
 
                     if (cookie.isEmpty()) {
 
@@ -139,7 +138,7 @@ class LoginActivity : AppCompatActivity() {
 
                             Toast.makeText(
                                 this@LoginActivity,
-                                "获取Cookie失败",
+                                "Cookie获取失败",
                                 Toast.LENGTH_LONG
                             ).show()
                         }
@@ -147,9 +146,13 @@ class LoginActivity : AppCompatActivity() {
                         return
                     }
 
-                    getSharedPreferences("app", MODE_PRIVATE)
-                        .edit()
+                    getSharedPreferences(
+                        "app",
+                        MODE_PRIVATE
+                    ).edit()
+
                         .putString("cookie", cookie)
+
                         .apply()
 
                     runOnUiThread {
