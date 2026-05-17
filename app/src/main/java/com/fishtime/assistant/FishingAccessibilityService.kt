@@ -12,45 +12,23 @@ class FishingAccessibilityService : AccessibilityService() {
     companion object {
         private const val TAG = "FishingAssistant"
         private const val KEY_WORD = "我的钓位"
-
-        // 轮询间隔：1秒
-        private const val POLL_INTERVAL = 1000L
+        private const val POLL_INTERVAL = 500L // 每0.5秒扫一次
     }
 
-    // 防止重复处理
     @Volatile
     private var isProcessing = false
 
-    // 定时器
     private var pollTimer: Timer? = null
 
     // ────────────────────────────────────────
-    // 服务启动：开始定时轮询
+    // 服务一启动就开始持续扫描
+    // 不依赖「开始监听」按钮
     // ────────────────────────────────────────
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        Log.d(TAG, "Accessibility服务已连接，启动轮询")
+        Log.d(TAG, "无障碍服务已启动，开始持续监听屏幕")
         startPolling()
-    }
-
-    // ────────────────────────────────────────
-    // 事件监听（页面切换时立即触发，比轮询更快）
-    // ────────────────────────────────────────
-
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-
-        if (!AppState.isRunning) return
-
-        if (
-            event?.eventType ==
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
-            event?.eventType ==
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-        ) {
-            // 事件触发时立即扫描一次（响应更快）
-            handleScan()
-        }
     }
 
     override fun onInterrupt() {}
@@ -58,11 +36,30 @@ class FishingAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         stopPolling()
+        Log.d(TAG, "无障碍服务已停止")
     }
 
     // ────────────────────────────────────────
-    // 定时轮询：每1秒主动扫描一次
-    // 解决「已经在页面上但没有事件触发」的问题
+    // 事件触发时也立即扫描（双保险）
+    // ────────────────────────────────────────
+
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+
+        val type = event?.eventType ?: return
+
+        if (
+            type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
+            type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+            type == AccessibilityEvent.TYPE_VIEW_CLICKED ||
+            type == AccessibilityEvent.TYPE_ANNOUNCEMENT
+        ) {
+            handleScan()
+        }
+    }
+
+    // ────────────────────────────────────────
+    // 定时轮询：每0.5秒主动扫描
+    // 不判断 AppState.isRunning
     // ────────────────────────────────────────
 
     private fun startPolling() {
@@ -70,9 +67,7 @@ class FishingAccessibilityService : AccessibilityService() {
         pollTimer = Timer()
         pollTimer?.scheduleAtFixedRate(object : TimerTask() {
             override fun run() {
-                if (AppState.isRunning) {
-                    handleScan()
-                }
+                handleScan()
             }
         }, 0, POLL_INTERVAL)
     }
@@ -83,7 +78,7 @@ class FishingAccessibilityService : AccessibilityService() {
     }
 
     // ────────────────────────────────────────
-    // 核心扫描逻辑
+    // 核心扫描
     // ────────────────────────────────────────
 
     private fun handleScan() {
@@ -92,12 +87,11 @@ class FishingAccessibilityService : AccessibilityService() {
 
         val root = rootInActiveWindow ?: return
 
-        // 检测当前页面是否包含「我的钓位」
         if (!findText(root, KEY_WORD)) return
 
-        Log.d(TAG, "检测到「我的钓位」页面")
-
         isProcessing = true
+
+        Log.d(TAG, "检测到「我的钓位」页面")
 
         val numbers = extractNumbers(root)
 
@@ -114,7 +108,7 @@ class FishingAccessibilityService : AccessibilityService() {
     }
 
     // ────────────────────────────────────────
-    // 节点树：查找包含目标文字的节点
+    // 查找包含目标文字的节点
     // ────────────────────────────────────────
 
     private fun findText(
@@ -138,7 +132,7 @@ class FishingAccessibilityService : AccessibilityService() {
     }
 
     // ────────────────────────────────────────
-    // 节点树：提取 1~99 的数字
+    // 提取 1~99 的数字
     // ────────────────────────────────────────
 
     private fun extractNumbers(
