@@ -19,17 +19,23 @@ import kotlin.concurrent.thread
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var prefs: SharedPreferences
+    private lateinit var prefs:
+        SharedPreferences
 
-    private lateinit var serviceStatus: TextView
+    private lateinit var serviceStatus:
+        TextView
 
-    private lateinit var enableButton: Button
+    private lateinit var enableButton:
+        Button
 
-    private lateinit var startButton: Button
+    private lateinit var startButton:
+        Button
 
-    private lateinit var logText: TextView
+    private lateinit var logText:
+        TextView
 
-    private lateinit var merchantSpinner: Spinner
+    private lateinit var merchantSpinner:
+        Spinner
 
     private val merchantList =
         mutableListOf<Merchant>()
@@ -38,7 +44,9 @@ class MainActivity : AppCompatActivity() {
         savedInstanceState: Bundle?
     ) {
 
-        super.onCreate(savedInstanceState)
+        super.onCreate(
+            savedInstanceState
+        )
 
         setContentView(
             R.layout.activity_main
@@ -71,7 +79,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ─────────────────────────────
-    // 初始化控件
+    // 初始化View
     // ─────────────────────────────
 
     private fun initViews() {
@@ -103,12 +111,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ─────────────────────────────
-    // 事件
+    // 初始化事件
     // ─────────────────────────────
 
     private fun initEvents() {
-
-        // 无障碍按钮
 
         enableButton.setOnClickListener {
 
@@ -117,14 +123,11 @@ class MainActivity : AppCompatActivity() {
             )
 
             startActivity(
-
                 Intent(
                     Settings.ACTION_ACCESSIBILITY_SETTINGS
                 )
             )
         }
-
-        // 开始监听
 
         startButton.setOnClickListener {
 
@@ -133,17 +136,13 @@ class MainActivity : AppCompatActivity() {
             ) {
 
                 Toast.makeText(
-
                     this,
-
                     "请先开启无障碍服务",
-
                     Toast.LENGTH_SHORT
-
                 ).show()
 
                 addLog(
-                    "❌ 无障碍服务未开启"
+                    "❌ 无障碍未开启"
                 )
 
                 return@setOnClickListener
@@ -156,17 +155,12 @@ class MainActivity : AppCompatActivity() {
             ) {
 
                 Toast.makeText(
-
                     this,
-
                     "请开启悬浮窗权限",
-
                     Toast.LENGTH_LONG
-
                 ).show()
 
                 startActivity(
-
                     Intent(
                         Settings.ACTION_MANAGE_OVERLAY_PERMISSION
                     )
@@ -175,60 +169,43 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            // 当前是否运行
-
-            if (!AppState.isRunning) {
+            if (
+                !AppState.isRunning
+            ) {
 
                 val position =
                     merchantSpinner.selectedItemPosition
 
                 if (
-                    position < 0 ||
-                    position >= merchantList.size
+                    position >= 0 &&
+                    position < merchantList.size
                 ) {
 
-                    Toast.makeText(
+                    val merchant =
+                        merchantList[position]
 
-                        this,
+                    prefs.edit()
 
-                        "请选择钓场",
+                        .putString(
+                            "merchant_id",
+                            merchant.mer_id
+                        )
 
-                        Toast.LENGTH_SHORT
+                        .putString(
+                            "merchant_name",
+                            merchant.mer_name
+                        )
 
-                    ).show()
+                        .apply()
 
-                    return@setOnClickListener
+                    addLog(
+                        "🎣 当前钓场: ${merchant.mer_name}"
+                    )
                 }
-
-                val merchant =
-                    merchantList[position]
-
-                // 保存钓场
-
-                prefs.edit()
-
-                    .putString(
-                        "merchant_id",
-                        merchant.mer_id
-                    )
-
-                    .putString(
-                        "merchant_name",
-                        merchant.mer_name
-                    )
-
-                    .apply()
-
-                addLog(
-                    "🎣 当前钓场: ${merchant.mer_name}"
-                )
-
-                // 启动监听
 
                 AppState.isRunning = true
 
                 startService(
-
                     Intent(
                         this,
                         FloatingWindowService::class.java
@@ -247,25 +224,23 @@ class MainActivity : AppCompatActivity() {
                 )
 
                 FloatingWindowManager.updateText(
-                    "🟢 监听中"
+                    """
+🎣 渔榜助手运行中
+
+等待进入:
+二选一页面...
+"""
                 )
 
             } else {
 
-                // 停止监听
-
                 AppState.isRunning = false
 
                 stopService(
-
                     Intent(
                         this,
                         FloatingWindowService::class.java
                     )
-                )
-
-                FloatingWindowManager.hide(
-                    this
                 )
 
                 startButton.text =
@@ -274,6 +249,8 @@ class MainActivity : AppCompatActivity() {
                 addLog(
                     "🔴 停止监听"
                 )
+
+                FloatingWindowManager.hide()
             }
         }
     }
@@ -315,9 +292,7 @@ class MainActivity : AppCompatActivity() {
 
                 val result =
                     Gson().fromJson(
-
                         json,
-
                         MerchantResponse::class.java
                     )
 
@@ -331,7 +306,6 @@ class MainActivity : AppCompatActivity() {
 
                     val names =
                         merchantList.map {
-
                             it.mer_name
                         }
 
@@ -346,39 +320,11 @@ class MainActivity : AppCompatActivity() {
                         )
 
                     adapter.setDropDownViewResource(
-
                         android.R.layout.simple_spinner_dropdown_item
                     )
 
                     merchantSpinner.adapter =
                         adapter
-
-                    // 恢复之前选择的钓场
-
-                    val savedMerchantId =
-                        prefs.getString(
-                            "merchant_id",
-                            ""
-                        )
-
-                    if (
-                        !savedMerchantId.isNullOrEmpty()
-                    ) {
-
-                        val index =
-                            merchantList.indexOfFirst {
-
-                                it.mer_id ==
-                                        savedMerchantId
-                            }
-
-                        if (index >= 0) {
-
-                            merchantSpinner.setSelection(
-                                index
-                            )
-                        }
-                    }
 
                     addLog(
                         "✅ 已加载 ${merchantList.size} 个钓场"
@@ -387,12 +333,10 @@ class MainActivity : AppCompatActivity() {
 
             } catch (e: Exception) {
 
-                e.printStackTrace()
-
                 runOnUiThread {
 
                     addLog(
-                        "❌ 钓场加载失败"
+                        "❌ 钓场加载失败: ${e.message}"
                     )
                 }
             }
@@ -400,30 +344,30 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ─────────────────────────────
-    // 无障碍状态
+    // 更新无障碍状态
     // ─────────────────────────────
 
     private fun updateAccessibilityStatus() {
 
-        if (
-            isAccessibilityEnabled()
-        ) {
+        serviceStatus.text =
 
-            serviceStatus.text =
+            if (
+                isAccessibilityEnabled()
+            )
+
                 "✅ 无障碍服务已开启"
 
-        } else {
+            else
 
-            serviceStatus.text =
                 "❌ 无障碍服务未开启"
-        }
     }
 
     // ─────────────────────────────
-    // 检查无障碍
+    // 检测无障碍
     // ─────────────────────────────
 
-    private fun isAccessibilityEnabled(): Boolean {
+    private fun isAccessibilityEnabled():
+            Boolean {
 
         val expectedService =
 
@@ -446,7 +390,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ─────────────────────────────
-    // 日志
+    // 日志输出
     // ─────────────────────────────
 
     private fun addLog(
