@@ -14,9 +14,11 @@ import org.json.JSONObject
 
 class LoginActivity : AppCompatActivity() {
 
-    private lateinit var passwordInput: EditText
+    private lateinit var passwordInput:
+        EditText
 
-    private lateinit var loginButton: Button
+    private lateinit var loginButton:
+        Button
 
     private val client =
         OkHttpClient()
@@ -25,7 +27,9 @@ class LoginActivity : AppCompatActivity() {
         savedInstanceState: Bundle?
     ) {
 
-        super.onCreate(savedInstanceState)
+        super.onCreate(
+            savedInstanceState
+        )
 
         val prefs =
             getSharedPreferences(
@@ -39,6 +43,7 @@ class LoginActivity : AppCompatActivity() {
                 false
             )
 
+        // 已登录直接进入主页
         if (loggedIn) {
 
             startActivity(
@@ -145,6 +150,16 @@ class LoginActivity : AppCompatActivity() {
                 val responseJson =
                     JSONObject(responseBody)
 
+                // ★ 重点修复
+                // 获取完整Cookie
+                val cookies =
+                    response.headers(
+                        "Set-Cookie"
+                    )
+
+                val cookie =
+                    cookies.joinToString("; ")
+
                 runOnUiThread {
 
                     loginButton.isEnabled =
@@ -161,11 +176,7 @@ class LoginActivity : AppCompatActivity() {
                     )
                 ) {
 
-                    val cookie =
-                        response.header(
-                            "Set-Cookie"
-                        ) ?: ""
-
+                    // 保存登录状态 + Cookie
                     getSharedPreferences(
                         "app",
                         MODE_PRIVATE
