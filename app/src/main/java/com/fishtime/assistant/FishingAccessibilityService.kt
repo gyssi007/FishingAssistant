@@ -12,89 +12,64 @@ class FishingAccessibilityService : AccessibilityService() {
         private const val KEY_WORD = "我的钓位"
     }
 
-    // ────────────────────────────────────────
-    // 入口
-    // ────────────────────────────────────────
+    // 防止重复触发
+    @Volatile
+    private var isProcessing = false
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
 
         if (!AppState.isRunning) return
 
         if (
-            event?.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
-            event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            event?.eventType ==
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
+            event?.eventType ==
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         ) {
-
-            // ① 优先用 event 自带文本（兼容微信 X5 内核）
-            val eventTexts = event.text
-                ?.map { it.toString() }
-                ?: emptyList()
-
-            val handled = tryParseFromTexts(eventTexts)
-
-            // ② 事件文本没拿到，走节点树（普通浏览器 / 原生 APP）
-            if (!handled) {
-                scanPageViaNodeTree()
-            }
+            handleEvent()
         }
     }
 
     override fun onInterrupt() {}
 
-    // ────────────────────────────────────────
-    // 方案B：从 event.getText() 解析（微信专用）
-    // ────────────────────────────────────────
+    private fun handleEvent() {
 
-    private fun tryParseFromTexts(texts: List<String>): Boolean {
-
-        if (texts.isEmpty()) return false
-
-        val allText = texts.joinToString(" ")
-
-        Log.d(TAG, "Event文本: $allText")
-
-        // 必须含关键词
-        if (!allText.contains(KEY_WORD)) return false
-
-        val numbers = extractNumbersFromString(allText)
-
-        if (numbers.size >= 2) {
-            val seatA = numbers[0]
-            val seatB = numbers[1]
-            Log.d(TAG, "【Event方式】识别到: $seatA / $seatB")
-            FloatingWindowManager.updateText("🎯 识别到 $seatA / $seatB")
-            return true
-        }
-
-        Log.d(TAG, "【Event方式】含关键词但数字不足，数字列表: $numbers")
-        return false
-    }
-
-    // ────────────────────────────────────────
-    // 方案A：遍历节点树（普通浏览器 / 原生 APP）
-    // ────────────────────────────────────────
-
-    private fun scanPageViaNodeTree() {
+        if (isProcessing) return
 
         val root = rootInActiveWindow ?: return
 
-        val found = findText(root, KEY_WORD)
+        // 检测当前页面是否包含「我的钓位」
+        val isTargetPage = findText(root, KEY_WORD)
 
-        if (found) {
-            val numbers = extractNumbersFromNode(root)
-            if (numbers.size >= 2) {
-                val seatA = numbers[0]
-                val seatB = numbers[1]
-                Log.d(TAG, "【节点树方式】识别到: $seatA / $seatB")
+        if (!isTargetPage) return
+
+        Log.d(TAG, "检测到「我的钓位」页面")
+
+        isProcessing = true
+
+        // 先尝试节点树（普通浏览器有效）
+        val numbers = extractNumbers(root)
+
+        if (numbers.size >= 2) {
+            // 节点树直接拿到了（普通浏览器场景）
+            val seatA = numbers[0]
+            val seatB = numbers[1]
+            Log.d(TAG, "【节点树】识别到: $seatA / $seatB")
+            FloatingWindowManager.updateText("🎯 识别到 $seatA / $seatB")
+            isProcessing = false
+        } else {
+            // 节点树拿不到 → 用 JS 注入（微信场景）
+            Log.d(TAG, "节点树无数据，启动JS注入")
+            WeChatJsInjector.readSeatNumbers { seatA, seatB ->
+                Log.d(TAG, "【JS注入】识别到: $seatA / $seatB")
                 FloatingWindowManager.updateText("🎯 识别到 $seatA / $seatB")
-            } else {
-                Log.d(TAG, "【节点树方式】含关键词但数字不足，数字列表: $numbers")
+                isProcessing = false
             }
         }
     }
 
     // ────────────────────────────────────────
-    // 工具：节点树遍历
+    // 节点树：查找包含目标文字的节点
     // ────────────────────────────────────────
 
     private fun findText(
@@ -103,8 +78,11 @@ class FishingAccessibilityService : AccessibilityService() {
     ): Boolean {
 
         val text = node.text?.toString() ?: ""
+        val desc = node.contentDescription?.toString() ?: ""
 
-        if (text.contains(target)) return true
+        if (text.contains(target) || desc.contains(target)) {
+            return true
+        }
 
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
@@ -114,22 +92,24 @@ class FishingAccessibilityService : AccessibilityService() {
         return false
     }
 
-    private fun extractNumbersFromNode(
+    // ────────────────────────────────────────
+    // 节点树：提取 1~99 的数字
+    // ────────────────────────────────────────
+
+    private fun extractNumbers(
         node: AccessibilityNodeInfo
     ): List<String> {
 
         val result = mutableListOf<String>()
         recursiveExtract(node, result)
 
-        return result
-            .distinct()
-            .filter {
-                try {
-                    it.toInt() in 1..99
-                } catch (e: Exception) {
-                    false
-                }
+        return result.distinct().filter {
+            try {
+                it.toInt() in 1..99
+            } catch (e: Exception) {
+                false
             }
+        }
     }
 
     private fun recursiveExtract(
@@ -137,34 +117,14 @@ class FishingAccessibilityService : AccessibilityService() {
         result: MutableList<String>
     ) {
         val text = node.text?.toString() ?: ""
+        val desc = node.contentDescription?.toString() ?: ""
 
-        if (text.matches(Regex("^\\d{1,2}$"))) {
-            result.add(text)
-        }
+        if (text.matches(Regex("^\\d{1,2}$"))) result.add(text)
+        if (desc.matches(Regex("^\\d{1,2}$"))) result.add(desc)
 
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             recursiveExtract(child, result)
         }
-    }
-
-    // ────────────────────────────────────────
-    // 工具：从字符串提取 1~99 的数字
-    // ────────────────────────────────────────
-
-    private fun extractNumbersFromString(text: String): List<String> {
-
-        return Regex("\\b([1-9]\\d?)\\b")
-            .findAll(text)
-            .map { it.value }
-            .distinct()
-            .filter {
-                try {
-                    it.toInt() in 1..99
-                } catch (e: Exception) {
-                    false
-                }
-            }
-            .toList()
     }
 }
