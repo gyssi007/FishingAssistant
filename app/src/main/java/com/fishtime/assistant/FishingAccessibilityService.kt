@@ -4,17 +4,39 @@ import android.accessibilityservice.AccessibilityService
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.util.Log
+import java.util.Timer
+import java.util.TimerTask
 
 class FishingAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "FishingAssistant"
         private const val KEY_WORD = "我的钓位"
+
+        // 轮询间隔：1秒
+        private const val POLL_INTERVAL = 1000L
     }
 
-    // 防止重复触发
+    // 防止重复处理
     @Volatile
     private var isProcessing = false
+
+    // 定时器
+    private var pollTimer: Timer? = null
+
+    // ────────────────────────────────────────
+    // 服务启动：开始定时轮询
+    // ────────────────────────────────────────
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        Log.d(TAG, "Accessibility服务已连接，启动轮询")
+        startPolling()
+    }
+
+    // ────────────────────────────────────────
+    // 事件监听（页面切换时立即触发，比轮询更快）
+    // ────────────────────────────────────────
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
 
@@ -26,46 +48,69 @@ class FishingAccessibilityService : AccessibilityService() {
             event?.eventType ==
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         ) {
-            handleEvent()
+            // 事件触发时立即扫描一次（响应更快）
+            handleScan()
         }
     }
 
     override fun onInterrupt() {}
 
-    private fun handleEvent() {
+    override fun onDestroy() {
+        super.onDestroy()
+        stopPolling()
+    }
+
+    // ────────────────────────────────────────
+    // 定时轮询：每1秒主动扫描一次
+    // 解决「已经在页面上但没有事件触发」的问题
+    // ────────────────────────────────────────
+
+    private fun startPolling() {
+        stopPolling()
+        pollTimer = Timer()
+        pollTimer?.scheduleAtFixedRate(object : TimerTask() {
+            override fun run() {
+                if (AppState.isRunning) {
+                    handleScan()
+                }
+            }
+        }, 0, POLL_INTERVAL)
+    }
+
+    private fun stopPolling() {
+        pollTimer?.cancel()
+        pollTimer = null
+    }
+
+    // ────────────────────────────────────────
+    // 核心扫描逻辑
+    // ────────────────────────────────────────
+
+    private fun handleScan() {
 
         if (isProcessing) return
 
         val root = rootInActiveWindow ?: return
 
         // 检测当前页面是否包含「我的钓位」
-        val isTargetPage = findText(root, KEY_WORD)
-
-        if (!isTargetPage) return
+        if (!findText(root, KEY_WORD)) return
 
         Log.d(TAG, "检测到「我的钓位」页面")
 
         isProcessing = true
 
-        // 先尝试节点树（普通浏览器有效）
         val numbers = extractNumbers(root)
 
         if (numbers.size >= 2) {
-            // 节点树直接拿到了（普通浏览器场景）
             val seatA = numbers[0]
             val seatB = numbers[1]
-            Log.d(TAG, "【节点树】识别到: $seatA / $seatB")
+            Log.d(TAG, "识别到: $seatA / $seatB")
             FloatingWindowManager.updateText("🎯 识别到 $seatA / $seatB")
-            isProcessing = false
         } else {
-            // 节点树拿不到 → 用 JS 注入（微信场景）
-            Log.d(TAG, "节点树无数据，启动JS注入")
-            WeChatJsInjector.readSeatNumbers { seatA, seatB ->
-                Log.d(TAG, "【JS注入】识别到: $seatA / $seatB")
-                FloatingWindowManager.updateText("🎯 识别到 $seatA / $seatB")
-                isProcessing = false
-            }
+            Log.d(TAG, "找到关键词但数字不足: $numbers")
         }
+
+        isProcessing = false
     }
 
     // ────────────────────────────────────────
