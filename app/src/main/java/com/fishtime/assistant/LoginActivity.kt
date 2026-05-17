@@ -59,7 +59,7 @@ class LoginActivity : AppCompatActivity() {
 
         passwordInput =
             findViewById(
-                R.id.passwordInput
+                R.id.passwordEdit
             )
 
         loginButton =
