@@ -1,43 +1,51 @@
 package com.fishtime.assistant
 
 import android.content.Intent
-import android.content.SharedPreferences
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.fishtime.assistant.network.ApiClient
-import com.fishtime.assistant.network.LoginRequest
-import com.fishtime.assistant.network.LoginResponse
-import com.google.gson.Gson
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import kotlin.concurrent.thread
+import org.json.JSONObject
 
 class LoginActivity : AppCompatActivity() {
 
-    private lateinit var prefs: SharedPreferences
+    private lateinit var passwordInput: EditText
 
-    override fun onCreate(savedInstanceState: Bundle?) {
+    private lateinit var loginButton: Button
+
+    private val client =
+        OkHttpClient()
+
+    override fun onCreate(
+        savedInstanceState: Bundle?
+    ) {
 
         super.onCreate(savedInstanceState)
 
-        prefs = getSharedPreferences(
-            "FishingAssistant",
-            MODE_PRIVATE
-        )
+        val prefs =
+            getSharedPreferences(
+                "app",
+                MODE_PRIVATE
+            )
 
-        val loggedIn = prefs.getBoolean(
-            "logged_in",
-            false
-        )
+        val loggedIn =
+            prefs.getBoolean(
+                "logged_in",
+                false
+            )
 
         if (loggedIn) {
 
             startActivity(
-                Intent(this, MainActivity::class.java)
+                Intent(
+                    this,
+                    MainActivity::class.java
+                )
             )
 
             finish()
@@ -45,82 +53,150 @@ class LoginActivity : AppCompatActivity() {
             return
         }
 
-        setContentView(R.layout.activity_login)
+        setContentView(
+            R.layout.activity_login
+        )
 
-        val passwordEdit =
-            findViewById<EditText>(R.id.passwordEdit)
+        passwordInput =
+            findViewById(
+                R.id.passwordInput
+            )
 
-        val loginButton =
-            findViewById<Button>(R.id.loginButton)
+        loginButton =
+            findViewById(
+                R.id.loginButton
+            )
 
         loginButton.setOnClickListener {
 
-            val password =
-                passwordEdit.text.toString()
-
-            if (password.isEmpty()) {
-
-                Toast.makeText(
-                    this,
-                    "请输入密码",
-                    Toast.LENGTH_SHORT
-                ).show()
-
-                return@setOnClickListener
-            }
-
-            login(password)
+            doLogin()
         }
     }
 
-    private fun login(password: String) {
+    private fun doLogin() {
 
-        thread {
+        val password =
+            passwordInput.text
+                .toString()
+                .trim()
+
+        if (
+            password.isEmpty()
+        ) {
+
+            Toast.makeText(
+
+                this,
+
+                "请输入密码",
+
+                Toast.LENGTH_SHORT
+
+            ).show()
+
+            return
+        }
+
+        loginButton.isEnabled =
+            false
+
+        loginButton.text =
+            "登录中..."
+
+        Thread {
 
             try {
 
-                val gson = Gson()
+                val json =
+                    JSONObject()
 
-                val json = gson.toJson(
-                    LoginRequest(password)
+                json.put(
+                    "password",
+                    password
                 )
 
-                val body = json.toRequestBody(
-                    "application/json".toMediaType()
-                )
+                val body =
+                    json.toString()
+                        .toRequestBody(
 
-                val request = Request.Builder()
-                    .url("https://fishing.gysssi.com/api/auth/login")
-                    .post(body)
-                    .build()
+                            "application/json"
+                                .toMediaType()
+                        )
 
-                val response = ApiClient.client
-                    .newCall(request)
-                    .execute()
+                val request =
+                    Request.Builder()
 
-                val responseText =
-                    response.body?.string() ?: ""
+                        .url(
+                            "https://fishing.gysssi.com/api/auth/login"
+                        )
 
-                val result = gson.fromJson(
-                    responseText,
-                    LoginResponse::class.java
-                )
+                        .post(body)
+
+                        .build()
+
+                val response =
+                    client.newCall(request)
+                        .execute()
+
+                val responseBody =
+                    response.body?.string()
+                        ?: ""
+
+                val responseJson =
+                    JSONObject(responseBody)
 
                 runOnUiThread {
 
-                    if (result.success) {
+                    loginButton.isEnabled =
+                        true
 
-                        prefs.edit()
-                            .putBoolean("logged_in", true)
-                            .apply()
+                    loginButton.text =
+                        "登 录"
+                }
+
+                if (
+                    responseJson.optBoolean(
+                        "success",
+                        false
+                    )
+                ) {
+
+                    val cookie =
+                        response.header(
+                            "Set-Cookie"
+                        ) ?: ""
+
+                    getSharedPreferences(
+                        "app",
+                        MODE_PRIVATE
+                    ).edit()
+
+                        .putBoolean(
+                            "logged_in",
+                            true
+                        )
+
+                        .putString(
+                            "cookie",
+                            cookie
+                        )
+
+                        .apply()
+
+                    runOnUiThread {
 
                         Toast.makeText(
+
                             this,
+
                             "登录成功",
+
                             Toast.LENGTH_SHORT
+
                         ).show()
 
                         startActivity(
+
                             Intent(
                                 this,
                                 MainActivity::class.java
@@ -128,28 +204,48 @@ class LoginActivity : AppCompatActivity() {
                         )
 
                         finish()
+                    }
 
-                    } else {
+                } else {
+
+                    runOnUiThread {
 
                         Toast.makeText(
+
                             this,
-                            result.error ?: "登录失败",
+
+                            "密码错误",
+
                             Toast.LENGTH_SHORT
+
                         ).show()
                     }
                 }
 
             } catch (e: Exception) {
 
+                e.printStackTrace()
+
                 runOnUiThread {
 
+                    loginButton.isEnabled =
+                        true
+
+                    loginButton.text =
+                        "登 录"
+
                     Toast.makeText(
+
                         this,
-                        "网络错误: ${e.message}",
-                        Toast.LENGTH_LONG
+
+                        "网络异常",
+
+                        Toast.LENGTH_SHORT
+
                     ).show()
                 }
             }
-        }
+
+        }.start()
     }
 }
