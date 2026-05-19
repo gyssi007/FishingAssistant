@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 网络权限 -->
+    <uses-permission
+        android:name="android.permission.INTERNET"/>
+
+    <!-- 悬浮窗权限 -->
+    <uses-permission
+        android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+
+    <application
+        android:allowBackup="true"
+        android:label="渔榜助手"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AppCompat.Light.NoActionBar">
+
+        <!-- 登录页面 -->
+        <activity
+            android:name=".LoginActivity"
+            android:exported="true">
+
+            <intent-filter>
+
+                <action
+                    android:name="android.intent.action.MAIN"/>
+
+                <category
+                    android:name="android.intent.category.LAUNCHER"/>
+
+            </intent-filter>
+
+        </activity>
+
+        <!-- 主界面 -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"/>
+
+        <!-- Accessibility 服务 -->
+        <service
+            android:name=".FishingAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="false">
+
+            <intent-filter>
+
+                <action
+                    android:name="android.accessibilityservice.AccessibilityService"/>
+
+            </intent-filter>
+
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config"/>
+
+        </service>
+
+        <!-- 悬浮窗服务 -->
+        <service
+            android:name=".FloatingWindowService"
+            android:exported="false"/>
+
+    </application>
+
+</manifest>
